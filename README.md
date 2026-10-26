@@ -11,12 +11,14 @@ Two layers, and they never overlap:
 1. **`schemes/` — what you run.** Ready-to-deploy transport schemes. Each
    directory carries the complete Xray configuration for *both* ends plus its
    own documentation, and picking one is copying a file:
-   - **VLESS + TCP + XTLS-Vision + REALITY**: zero domain required. The server
-     borrows the TLS identity of a high-reputation foreign site and deflects
-     active scanners to that real site.
-   - **VLESS + TCP + XTLS-Vision + TLS (Web Fallback)**: a domain you own with
-     an authentic CA certificate, deflecting active probes to a real local
-     website (Nginx/Caddy) via the PROXY protocol.
+   - **VLESS + TCP + XTLS-Vision + REALITY** *(Standard / Production)*: zero domain
+     required. The server borrows the TLS identity of a high-reputation foreign
+     site, completely eliminating personal SNI visibility, Certificate
+     Transparency log exposure, and active probing signatures.
+   - **VLESS + TCP + XTLS-Vision + TLS (Web Fallback)** *(Legacy / High Censorship Risk)*:
+     requires a self-owned domain and CA certificate. Subject to zero-collateral
+     SNI bans and automated CT log harvesting; retained strictly for corporate
+     ASN-checking intranets.
 2. **`host/` — where it runs.** The OS integration, identical whichever scheme
    you pick. `host/client/` is a transparent proxy (TProxy) for Linux
    workstations and routers: Xray, nftables and policy routing, with zero
@@ -44,6 +46,7 @@ Two layers, and they never overlap:
 │
 ├── host/                           # Where it runs: OS artifacts, identical for every scheme
 │   ├── client/                     #   Generic Linux TProxy (workstation / gateway)
+│   │   ├── README.md               #   TProxy datapath architecture & Xray configuration contract
 │   │   ├── xray-tproxy.service
 │   │   ├── xray-tproxy.sysusers.conf
 │   │   ├── xray-tproxy.nft
@@ -55,10 +58,13 @@ Two layers, and they never overlap:
 │       ├── 99-xray-tuning.conf
 │       └── fallback/{nginx,caddy}/ #   Disguise website, used by the TLS scheme only
 │
-└── docs/                           # Comprehensive Diátaxis Documentation
-    ├── how-to/                     # Task-oriented guides (Client & Server)
-    ├── reference/                  # Technical reference (Configs, Traffic)
-    └── explanation/                # Architectural & cryptographic deep dives
+└── docs/                           # Comprehensive Diátaxis Documentation Suite
+    ├── tutorials/                  # Guided walk-throughs for new operators
+    ├── how-to/                     # Task-oriented administration recipes
+    ├── reference/                  # Technical specifications, configs, and tables
+    ├── explanation/                # Architectural, cryptographic & networking deep dives
+    ├── adr/                        # Architectural Decision Records
+    └── dev/                        # Contributor governance and engineering standards
 ```
 
 Two layers, and they never overlap:
@@ -81,8 +87,8 @@ committed: copy a scheme config to a sibling `*.local.json` and fill it in —
 ## Quick Start
 
 Two hosts, one scheme. **Install the OS layer from this repository, then deploy
-the same scheme's config on both ends.** Pick the scheme first: `reality` needs
-nothing but an IP, `tls` needs a domain and a certificate.
+the same scheme's config on both ends.** For modern censorship circumvention,
+always use `vless-xtls-vision-reality` (zero domain, zero CT log footprint).
 
 Every command is one `install`; nothing is generated or templated. Explanations
 per step, prerequisites and the optional parts are in
@@ -91,7 +97,7 @@ per step, prerequisites and the optional parts are in
 ### On the client (workstation / gateway)
 
 ```sh
-SCHEME=./schemes/vless-xtls-vision-reality   # or: vless-xtls-vision-tls
+SCHEME=./schemes/vless-xtls-vision-reality   # Standard production scheme
 
 # 1. OS layer (scheme-independent)
 sudo install -Dm644 ./host/client/xray-tproxy.service        /etc/systemd/system/
@@ -149,19 +155,41 @@ fallback site: [How to Set Up VLESS + Vision + TLS with Web Fallback](docs/how-t
 
 ## Documentation
 
-See the [Documentation Index](docs/index.md):
+The project documentation strictly follows the [Diátaxis](docs/index.md) framework:
 
-### Guides
+### 1. Tutorials (Learning-Oriented)
+- [Getting Started: Deploying Your First Xray Transparent Proxy](docs/tutorials/getting-started.md)
+- [Tutorials Catalog](docs/tutorials/index.md)
+
+### 2. How-To Guides (Task-Oriented)
 - [How to Install and Start the Transparent Proxy](docs/how-to/install-and-start.md)
 - [How to Deploy an Xray Proxy Server on a VPS](docs/how-to/deploy-server.md)
 - [How to Set Up VLESS + Vision + TLS with Web Fallback](docs/how-to/setup-tls-fallback.md)
 - [How to Verify the Setup](docs/how-to/verify-the-setup.md)
 - [How to Troubleshoot Common Problems](docs/how-to/troubleshoot-common-problems.md)
+- [How to Use Captive Portal Networks](docs/how-to/use-captive-portal-networks.md)
+- [How-To Catalog](docs/how-to/index.md)
 
-### Reference & Mechanism Deep Dives
-- [Transport Schemes Matrix](schemes/README.md)
-- [XTLS-Vision Mechanism](docs/explanation/xtls-vision.md)
-- [REALITY Scheme](schemes/vless-xtls-vision-reality/README.md)
-- [TLS + Fallback Scheme](schemes/vless-xtls-vision-tls/README.md)
-- [Architecture](docs/explanation/architecture.md)
-- [Data Packet Lifecycle](docs/explanation/packet-lifecycle.md)
+### 3. Reference (Information-Oriented)
+- [Client Configuration Reference](docs/reference/client-configuration.md)
+- [Server Configuration Reference](docs/reference/server-configuration.md)
+- [Traffic Selection Reference](docs/reference/traffic-selection.md)
+- [Host Artifacts Reference](docs/reference/host-artifacts.md)
+- [Reference Catalog](docs/reference/index.md)
+
+### 4. Explanation (Understanding-Oriented)
+- [Architecture & Two-Layer Decoupling](docs/explanation/architecture.md)
+- [Data Packet Lifecycle & Steering Model](docs/explanation/packet-lifecycle.md)
+- [DNS Architecture & Real-IP Split](docs/explanation/dns.md)
+- [Captive Portal Compatibility](docs/explanation/captive-portals.md)
+- [Policy & Routing Decisions](docs/explanation/policy-decisions.md)
+- [XTLS-Vision Padding & Zero-Copy Splice](docs/explanation/xtls-vision.md)
+- [REALITY Target Selection & Camouflage](docs/explanation/reality-target-selection.md)
+- [Explanation Catalog](docs/explanation/index.md)
+
+---
+
+## Architectural Decision Records & Contributor Standards
+
+- **[Architectural Decision Registry](docs/adr/index.md)**: Binding records, invariant definitions, and trade-offs (ADR-0001 through ADR-0005).
+- **[Engineering Standards](docs/dev/standards/README.md)**: Workspace topology, system invariants, markdown style, and PR review gates.

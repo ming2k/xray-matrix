@@ -7,6 +7,24 @@ the deployed copy is `/etc/xray/config.json`. The unit starts Xray with
 `-config /etc/xray/config.json`, so exactly one file is loaded: extra
 `*.json` files placed in `/etc/xray/` are ignored, not merged.
 
+## Architectural Boundary: The TProxy Contract vs. Pluggable Schemes
+
+The client configuration separates into two distinct functional layers:
+
+1. **The TProxy Datapath Contract (Mandatory Invariants)**:
+   Requirements imposed by the Linux kernel datapath in `host/client/` (`xray-tproxy.nft`
+   and `xray-tproxy.service`). The inbound (`dokodemo-door`, `port: 12345`,
+   `sockopt.tproxy: "tproxy"`), domain sniffing (`sniffing.enabled: true`,
+   `routeOnly: true`), outbound bypass mark (`sockopt.mark: 2`), and DNS
+   interception (`port: 53 -> dns-out`) are invariants. Modifying or omitting
+   them causes startup aborts, failed transparent routing, or catastrophic
+   routing loops. See [host/client/README.md](../../host/client/README.md) and
+   [Host Artifacts Reference](host-artifacts.md#3-client-datapath-contract-xray-interface-requirements).
+2. **The Transport Scheme Payload (Pluggable)**:
+   The tunnel protocol (`vless`), cryptographic security (`reality` or `tls`),
+   credentials, and routing policy lists. These are configured per scheme in
+   `schemes/<scheme>/` and can be customized without touching the datapath layer.
+
 ## Placeholders
 
 Replace every placeholder before starting the service.
@@ -97,7 +115,8 @@ The `proxy` tag is local to this template — a deployment may rename it
 
 The two dialing outbounds (`proxy`, `direct`) set
 `streamSettings.sockopt.mark: 2`, which matches `BYPASS_MARK` in the
-nftables rules so Xray's own connections are never re-intercepted;
+nftables rules so Xray's own connections are never re-intercepted (omitting
+this mark causes an immediate infinite routing loop and packet storm);
 `dns-out` and `blocked` never open a socket and need no mark. They also
 configure `tcpKeepAliveIdle: 15` and `tcpKeepAliveInterval: 5` to prune
 stale sockets quickly after sleep/wake or network interface switches.
@@ -106,6 +125,71 @@ stale sockets quickly after sleep/wake or network interface switches.
 older `settings.domainStrategy` key was deprecated: the current release
 migrates it automatically and logs a warning, and it will be removed in a
 future release, so keep it under `sockopt`.
+
+### Two-Hop Chaining (`dialerProxy`)
+
+When an egress node is unreachable from the client's network but a second node
+is reachable *and* can reach the first, the second becomes the transit hop. The
+client dials the first hop only; the second-hop connection is established from
+inside that tunnel:
+
+```json
+{
+  "outbounds": [
+    {
+      "protocol": "vless",
+      "tag": "exit",
+      "settings": {
+        "vnext": [{
+          "address": "203.0.113.10",
+          "port": 443,
+          "users": [{ "id": "<UUID_EXIT>", "encryption": "none", "flow": "xtls-rprx-vision" }]
+        }]
+      },
+      "streamSettings": {
+        "network": "tcp",
+        "security": "reality",
+        "realitySettings": {
+          "serverName": "<BORROWED_NAME_EXIT>",
+          "publicKey": "<PUBLIC_KEY_EXIT>",
+          "shortId": "<SHORT_ID_EXIT>",
+          "fingerprint": "chrome"
+        },
+        "sockopt": { "dialerProxy": "transit" }
+      }
+    },
+    {
+      "protocol": "vless",
+      "tag": "transit",
+      "settings": {
+        "vnext": [{
+          "address": "198.51.100.10",
+          "port": 443,
+          "users": [{ "id": "<UUID_TRANSIT>", "encryption": "none", "flow": "xtls-rprx-vision" }]
+        }]
+      },
+      "streamSettings": {
+        "network": "tcp",
+        "security": "reality",
+        "realitySettings": {
+          "serverName": "<BORROWED_NAME_TRANSIT>",
+          "publicKey": "<PUBLIC_KEY_TRANSIT>",
+          "shortId": "<SHORT_ID_TRANSIT>",
+          "fingerprint": "chrome"
+        }
+      }
+    }
+  ]
+}
+```
+
+`routing.rules` still name the exit tag in the final catch-all, so only the
+outbound list grows. Measured on a China → US West → Japan chain: first HTTPS
+request through the chain took `1.65 s`, and a 10 MB transfer ran at
+`14.8 MB/s` against `17.0 MB/s` for the single hop — about `13%` throughput for
+one extra hop. The exit node keeps its own REALITY identity; the transit node
+only forwards, so nothing on it may block the exit's address (a `geoip:private`
+style block rule is fine, an outbound deny for the exit is not).
 
 ## Routing Rules
 
@@ -156,6 +240,10 @@ Ordering carries meaning, so insert new rules deliberately:
   QUIC before falling back. Dropped uniformly, the fallback is immediate.
   The cost is that domestic QUIC also falls back to HTTP/2; LAN QUIC stays
   direct through rule 9, which matches on IP and needs no SNI.
+- Rule 2 keeps the server address out of the tunnel. It matches on **IP**, so it
+  also sends any of your own sites that resolve to that IP straight out instead
+  of through the proxy — which is usually what you want, but it means a "site is
+  broken" report must first establish which of the two paths it took.
 - Rule 15 is the fallback, and it proxies: the list is allow-by-exception,
   so an outdated ruleset errs towards tunnelling rather than leaking.
 

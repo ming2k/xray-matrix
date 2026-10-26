@@ -37,8 +37,12 @@
         },
         "sockopt": {
           "tcpFastOpen": true
-        }
-      },
+          // Do NOT add acceptProxyProtocol here: a REALITY inbound cannot parse
+          // the PROXY protocol header, and every handshake then fails with
+          // "tls: first record does not look like a TLS handshake". When a front
+          // proxy must send one, terminate it one hop earlier — see
+          // docs/how-to/share-port-443-with-a-website.md.
+        }      },
       "sniffing": {
         "enabled": true,
         "destOverride": ["http", "tls", "quic"]

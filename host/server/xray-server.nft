@@ -27,6 +27,11 @@ table inet filter {
     # Web & Proxy ports (HTTP for ACME challenges/redirect, HTTPS for Xray/Reality/TLS)
     tcp dport { 80, 443 } accept
 
+    # Optional alternate HTTPS entry on a host that demultiplexes :443 by SNI.
+    # It exists only for access networks that treat (ip, 443) differently from
+    # other ports; see host/server/nginx-stream/reality.conf.
+    # tcp dport 8446 accept
+
     # If running UDP protocols (e.g. Hysteria2, TUIC, or custom Xray UDP port)
     # udp dport 443 accept
   }

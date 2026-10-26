@@ -1,62 +1,66 @@
 # Documentation
 
-Entry point for the project documentation.
+Welcome to the **xray-matrix** documentation.
 
-## Where things live
+`xray-matrix` provides a hardened, transparent proxy architecture for modern Linux workstations, routers, and server egress nodes. The documentation is organized according to the **Diátaxis** framework across four distinct quadrants.
 
-The repository has two layers, and each keeps its documentation beside it:
+---
 
-| Layer | Documentation |
-|-------|---------------|
-| `schemes/` — *what you run* | [Transport Schemes](../schemes/README.md) compares them and links each scheme's own page. Mechanism, threat model, key generation and operational limits live with the scheme, in `schemes/<scheme>/README.md`. |
-| `host/` — *where it runs* | The client and server OS integration, documented below. Nothing here changes when you switch schemes. |
+## The Four Quadrants
 
-The guides below are split by which host you are setting up.
+```text
+               PRACTICAL                   THEORETICAL
+          ┌─────────────────────────┬─────────────────────────┐
+          │  Tutorials              │  How-To Guides          │
+LEARNING  │  (Learning-Oriented)    │  (Task-Oriented)        │
+          │  `docs/tutorials/`      │  `docs/how-to/`         │
+          ├─────────────────────────┼─────────────────────────┤
+          │  Reference              │  Explanation            │
+WORKING   │  (Information-Oriented) │  (Understanding-Orient) │
+          │  `docs/reference/`      │  `docs/explanation/`    │
+          └─────────────────────────┴─────────────────────────┘
+```
 
-## How-To Guides
+---
 
-### Client Setup
-| Page | Task |
-|------|------|
-| [How to Install and Start the Transparent Proxy](how-to/install-and-start.md) | Full client installation from a bare system |
-| [How to Verify the Setup](how-to/verify-the-setup.md) | Confirm traffic flows through Xray |
-| [How to Use Captive Portal Networks](how-to/use-captive-portal-networks.md) | Public Wi-Fi login with the proxy running |
-| [How to Troubleshoot Common Problems](how-to/troubleshoot-common-problems.md) | Symptom-driven fixes and diagnostics |
+## 1. [Tutorials](tutorials/index.md)
+Learning-oriented guides for new operators. Follow step-by-step to achieve your first working setup:
+- **[Getting Started: Deploying Your First Xray Transparent Proxy](tutorials/getting-started.md)**: From a clean machine to a running VPS egress node and Linux client transparent proxy.
 
-### Server Setup
-| Page | Task |
-|------|------|
-| [How to Deploy an Xray Proxy Server on a VPS](how-to/deploy-server.md) | Server hardening, BBR tuning, firewall, and service setup |
-| [How to Set Up VLESS + Vision + TLS with Web Fallback](how-to/setup-tls-fallback.md) | Automated ACME certificates and Nginx fallback site |
+---
 
-## Reference
+## 2. [How-To Guides](how-to/index.md)
+Task-oriented recipes for specific administration and operational needs:
 
-| Page | Lookup target |
-|------|---------------|
-| [Transport Schemes](../schemes/README.md) | Scheme comparison, selection, probe-response behaviour, switching |
-| [REALITY Scheme](../schemes/vless-xtls-vision-reality/README.md) | The Session ID channel, probe deflection, key generation |
-| [TLS + Fallback Scheme](../schemes/vless-xtls-vision-tls/README.md) | One port, two behaviours, PROXY protocol, certificate setup |
-| [Client Configuration Reference](reference/client-configuration.md) | Client Xray keys, placeholders, and routing rules |
-| [Server Configuration Reference](reference/server-configuration.md) | Server Xray keys, fallbacks, and stream settings |
-| [Traffic Selection Reference](reference/traffic-selection.md) | What nftables intercepts and what it bypasses |
-| [Host Artifacts Reference](reference/host-artifacts.md) | Service accounts, unit ownership and lifecycle, sandbox flags, kernel tuning |
+### Client Workstation & Gateway
+- **[How to Install and Start the Transparent Proxy](how-to/install-and-start.md)**
+- **[How to Verify the Setup](how-to/verify-the-setup.md)**
+- **[How to Use Captive Portal Networks](how-to/use-captive-portal-networks.md)**
+- **[How to Troubleshoot Common Problems](how-to/troubleshoot-common-problems.md)**
+- **[How to Diagnose GFW Blocks and Network Anomalies](how-to/diagnose-gfw-blocks.md)**
 
-## Explanation
+### Server VPS Node
+- **[How to Deploy an Xray Proxy Server on a VPS](how-to/deploy-server.md)**
+- **[How to Share Port 443 with an Existing Website](how-to/share-port-443-with-a-website.md)**
+- **[How to Set Up VLESS + Vision + TLS with Web Fallback](how-to/setup-tls-fallback.md)**: (Legacy / Corporate Profile; requires self-owned domain and CA certificate).
 
-### Architecture & Networking
-| Page | Topic |
-|------|-------|
-| [Architecture](explanation/architecture.md) | End-to-end architecture, component ownership, suspend/resume |
-| [Data Packet Lifecycle](explanation/packet-lifecycle.md) | Round-trip packet journey and 3-tier traffic steering model |
-| [DNS](explanation/dns.md) | System DNS vs. Xray DNS, and why port 53 stays direct |
-| [Captive Portals](explanation/captive-portals.md) | Why portals break under TProxy and how the design avoids it |
-| [Policy Decisions](explanation/policy-decisions.md) | QUIC, torrents, IPv6, DNS filtering and BBR: choices and trade-offs |
+---
 
-### Cryptographic & Anti-Censorship Mechanisms
-| Page | Topic |
-|------|-------|
-| [XTLS-Vision Mechanism](explanation/xtls-vision.md) | TLS-in-TLS padding obfuscation and Linux kernel zero-copy splice (shared by both schemes) |
+## 3. [Reference](reference/index.md)
+Formal technical specifications, configuration keys, and kernel artifacts:
+- **[Client Configuration Reference](reference/client-configuration.md)**: Keys, placeholders, and routing rule order.
+- **[Server Configuration Reference](reference/server-configuration.md)**: Inbound parameters and PROXY protocol fallback.
+- **[Traffic Selection Reference](reference/traffic-selection.md)**: nftables rules, bypass sets, and port handling.
+- **[Host Artifacts Reference](reference/host-artifacts.md)**: Service units, sandboxing, and kernel tuning parameters.
 
-## Contributor
+---
 
-- [Contributor Documentation](dev/index.md)
+## 4. [Explanation](explanation/index.md)
+Architectural deep dives, cryptographic guarantees, and networking rationale:
+- **[System Architecture](explanation/architecture.md)**: The Two-Layer model and datapath isolation.
+- **[Data Packet Lifecycle](explanation/packet-lifecycle.md)**: TProxy steering, table 110, and round-trip journey.
+- **[DNS Architecture & Real-IP Split](explanation/dns.md)**: Why port 53 stays direct and DoH eliminates pollution.
+- **[Captive Portal Compatibility](explanation/captive-portals.md)**: Transparent network escape mechanism.
+- **[Policy Decisions](explanation/policy-decisions.md)**: QUIC, BitTorrent, IPv6, and filtering trade-offs.
+- **[XTLS-Vision Mechanism](explanation/xtls-vision.md)**: TLS-in-TLS padding and zero-copy splice.
+- **[REALITY Target Selection & Camouflage](explanation/reality-target-selection.md)**: Threat model and target domains.

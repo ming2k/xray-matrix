@@ -1,4 +1,6 @@
-// Complete Client Configuration for VLESS + TCP + XTLS-Vision + TLS
+// Complete Client Configuration for VLESS + TCP + XTLS-Vision + TLS (Legacy / Corporate Profile)
+// ARCHITECTURAL WARNING: DEPRECATED FOR GFW EVASION.
+// Personal SNI is transmitted in plaintext. Use vless-xtls-vision-reality for all anti-censorship deployments.
 // Deploy to: /etc/xray/config.json
 {
   "log": {

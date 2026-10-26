@@ -23,7 +23,7 @@ DNS-loop exemption matches `meta skuid "xray"`, and the units name the user in
 | `table ip xray_v4`, `table ip6 xray_v6` | the client unit | Deleted and reloaded on every start; deleted only on an explicit stop |
 | `local default dev lo` route in table `110`, v4 and v6 | the client unit | Added on start if absent; flushed on an explicit stop |
 | `fwmark 0x1 lookup 110` policy rule, v4 and v6 | the `systemd-networkd` drop-in | One per uplink profile; the unit **repairs** it if missing and never removes it |
-| `/var/log/xray`, `/var/lib/xray` | the client unit (`LogsDirectory`, `StateDirectory`) | Created and owned by systemd |
+| `/var/log/xray`, `/var/lib/xray` | the client unit (`LogsDirectory`, `StateDirectory`) | The directories are created and owned by systemd; the two log files are re-owned to `xray` on every start |
 
 The split is deliberate: `systemd-networkd` owns the rule because it is the
 component that knows when the uplink is reconfigured, and the unit asserts the
@@ -36,7 +36,8 @@ unprotected while the unit reports healthy.
 |-------|--------|-------------------|
 | `ExecStartPre` | Add the table-110 routes and repair the policy rule if missing | Fails the start |
 | `ExecStartPre` | Delete both nftables tables, then load them from `/etc/nftables/xray-tproxy.nft` | Fails the start |
-| `ExecStartPre` | `xray run -test` on the config | Refuses to start; a bad config never replaces a working process |
+| `ExecStartPre` | Re-own `/var/log/xray/{access,error}.log` to `xray` | Fails the start |
+| `ExecStartPre` | `xray run -test` on the config, as `xray` | Fails the start; a bad config never replaces a working process |
 | `ExecStart` | Run Xray as `xray` | — |
 | `ExecStartPost` | Assert the policy rule, both tables, and the `12345` listener | Fails the start |
 
@@ -44,6 +45,15 @@ The listener is *polled* (up to 10 s) rather than checked once: `Type=simple`
 runs `ExecStartPost` as soon as the process is forked, while Xray still has to
 load `geoip.dat`/`geosite.dat` before it binds. A single check would race the
 start and turn a healthy service into a restart loop.
+
+The config preflight is the one step without the `+` prefix, deliberately: a
+preflight that runs as root answers the wrong question. It reads a
+`config.json` the service user cannot read and writes the log files as
+`root:root`, so a permission problem passes the check and reappears as
+`status=23` in `ExecStart`. Running it as `xray` makes the preflight fail for
+exactly the reasons the real start would fail. The ownership step before it
+covers the remaining case: `LogsDirectory=` owns the directory, not the files
+a root-run `xray` may have left inside it.
 
 ### Stop sequence
 
@@ -73,14 +83,38 @@ The sandbox is the common systemd set — `ProtectSystem=strict`,
 what lets them run outside the sandbox. `SystemCallFilter` is deliberately
 absent — see [Policy Decisions](../explanation/policy-decisions.md#systemcallfilter-is-opt-in).
 
-## 3. Server Unit
+## 3. Client Datapath Contract (Xray Interface Requirements)
+
+The client host layer (`host/client/`) and Xray Core operate across a strict
+interface contract. Any client configuration deployed to `/etc/xray/config.json`
+must satisfy these invariants; violating them breaks the transparent proxy or
+causes immediate network failure:
+
+| Kernel / OS Mechanism | Host Layer Source | Required Xray Configuration | Consequence if Missing |
+|-----------------------|-------------------|-----------------------------|------------------------|
+| TProxy listener | `xray-tproxy.nft`, `xray-tproxy.service` | `inbounds[].protocol = "dokodemo-door"`, `port = 12345` | Unit startup healthcheck poll fails after 10s |
+| `IP_TRANSPARENT` | Linux TProxy routing table 110 | `inbounds[].streamSettings.sockopt.tproxy = "tproxy"` | TCP connections reset (RST); UDP packets dropped |
+| Original destination recovery | Netfilter TProxy redirect | `inbounds[].settings.followRedirect = true` | Original destination IP lost |
+| Loop prevention (`BYPASS_MARK`) | `xray-tproxy.nft` output chain (`mark 2`) | `streamSettings.sockopt.mark: 2` on all dialing outbounds (`proxy`, `direct`) | **Infinite routing loop / packet storm; system halts** |
+| Payload SNI extraction | TProxy delivers raw IP without domain | `inbounds[].sniffing.enabled = true`, `routeOnly = true` | Domain-based routing (`geosite:*`, `domain:*`) never matches |
+| DNS loop exemption | `xray-tproxy.nft` output chain (`meta skuid "xray"`) | `User=xray` in service unit; Smart DNS via `dns-out` | Localhost DNS resolution deadlock on `127.0.0.53` |
+
+See [host/client/README.md](../../host/client/README.md) for the minimal
+compliant skeleton and [Client Configuration Reference](client-configuration.md)
+for field details.
+
+## 4. Server Unit
 
 Same shape, without the datapath ownership: no nftables tables, no routes, no
-policy rule. Its `ExecStartPre` runs `xray run -test` only.
+policy rule. Both start checks carry over from the client — the log files are
+re-owned to `xray`, and the `xray run -test` preflight runs *as* `xray`, with
+no `+` — because the schemes log to `/var/log/xray/` on the server too, and the
+failure they prevent (`status=23`, `permission denied` on the log file) is
+identical. See [Start sequence](#start-sequence).
 
 | Setting | Value | Why |
 |---------|-------|-----|
-| Capabilities | `CAP_NET_BIND_SERVICE`, `CAP_NET_ADMIN` | Bind `443` as the unprivileged `xray` user |
+| Capabilities | `CAP_NET_BIND_SERVICE`, `CAP_NET_ADMIN` | Bind `443` directly as the unprivileged `xray` user. **Not needed on a host that demultiplexes `:443`** — there Xray binds `127.0.0.1:10443` and nginx holds the privileged port (see §5) |
 | `XRAY_LOCATION_ASSET` | `/usr/share/xray:/usr/share/v2ray-rules-dat` | Two asset directories, so either layout works |
 | `RestrictAddressFamilies` | `AF_INET AF_INET6 AF_UNIX` | No netlink needed; the server does not touch kernel state |
 | `TimeoutStartSec` | `15` | Shorter than the client's: no listener polling after start |
@@ -88,7 +122,43 @@ policy rule. Its `ExecStartPre` runs `xray run -test` only.
 The fallback web server (Nginx or Caddy) is a separate service and is not
 managed by this unit.
 
-## 4. Kernel Tuning (server)
+## 5. Host That Serves Websites on 443
+
+A server that already terminates TLS for real sites cannot give `:443` to Xray
+without breaking them: nginx owns the wildcard port as a layer-4 SNI
+demultiplexer and Xray sits behind it on loopback.
+
+`host/server/nginx-stream/reality.conf` installs to
+`/etc/nginx/stream.d/reality.conf`, and `nginx.conf` gains one include:
+
+```nginx
+stream {
+    include /etc/nginx/stream.d/*.conf;
+}
+```
+
+Port ownership on such a host — one owner per port, no shared binds:
+
+| Port | Owner | Role |
+| :--- | :--- | :--- |
+| `0.0.0.0:443`, `[::]:443` | nginx (`www-data` workers) | L4 SNI demultiplexer; reads `ClientHello`, decrypts nothing |
+| `127.0.0.1:8443`, `[::1]:8443` | nginx | Website TLS termination, unchanged certificates and HTTP/2 |
+| `127.0.0.1:18443` | nginx | Strips the PROXY protocol header for the REALITY branch |
+| `127.0.0.1:10443` | xray (`xray` user) | REALITY inbound, loopback only |
+
+Three consequences worth knowing before editing anything:
+
+- The website listeners must carry `ssl proxy_protocol`, and the `http` block must
+  trust the demultiplexer (`set_real_ip_from 127.0.0.1; real_ip_header
+  proxy_protocol;`). Missing either half logs every visit as `127.0.0.1`.
+- `stream` is a separate module: Debian's `nginx` package needs
+  `libnginx-mod-stream`, otherwise the directive is unknown even though
+  `nginx -V` reports `--with-stream`.
+- `/var/log/nginx/stream.log` records the demultiplexer's own verdicts
+  (`sni=`, `backend=`, `status=`), which is what makes "the packet never arrived"
+  distinguishable from "the backend failed".
+
+## 6. Kernel Tuning (server)
 
 `host/server/99-xray-tuning.conf` installs to `/etc/sysctl.d/` and needs the
 server to host hundreds of concurrent tunnels:

@@ -58,6 +58,22 @@ sudo wright install xray-tproxy          # pulls xray and v2ray-rules-dat in
 Either route leaves the same state: `/usr/bin/xray`, the unit, the `xray`
 service account via sysusers, and the networkd template.
 
+One consequence of the second route is easy to miss: `wright` caches both the
+fetched source copy and the forge workspace, and neither is keyed on the
+*content* of a `[[sources]] type = "local"` file. Editing a file in
+`/var/lib/wright/plans/xray-tproxy/` and re-running `wright install` or
+`wright upgrade` can print `Building … Staging … Sealing … Deploying` while
+re-deploying the previous bytes. Drop the cache and verify what landed:
+
+```sh
+sudo wright clean xray-tproxy --sources          # re-fetched on the next build
+sudo wright upgrade xray-tproxy --force --fresh  # --fresh wipes the forge workspace
+sudo cmp /usr/lib/systemd/system/xray-tproxy.service ./host/client/xray-tproxy.service \
+  && echo identical
+```
+
+`cmp` is the acceptance test, not the exit status of the package manager.
+
 Two consequences of the unit owning the datapath, whichever route you take:
 
 - **`/etc/nftables/xray-tproxy.nft` is an `/etc` file the unit owns.** It is
@@ -109,9 +125,20 @@ worth knowing:
 - **`xray run -test` is the unit's own preflight**, so run it before installing:
   a config that fails never replaces a working one. `sudo nft -c -f
   ./host/client/xray-tproxy.nft` does the same for the ruleset.
+- **Custom configurations must satisfy the TProxy contract.** If you write a
+  configuration from scratch rather than starting from a scheme template, verify
+  that it satisfies the [Client Datapath Contract](../reference/host-artifacts.md#3-client-datapath-contract-xray-interface-requirements):
+  the `dokodemo-door` inbound on port 12345 with `sockopt.tproxy: "tproxy"`, and
+  `sockopt.mark: 2` on all dialing outbounds to prevent infinite routing loops.
 
 The service writes to `/var/log/xray`; `LogsDirectory=xray` makes the unit
-create and own that directory, so nothing has to pre-create it.
+create and own that directory, so nothing has to pre-create it. It does not own
+the files inside: a root-run `xray` (`sudo xray run`, or any preflight that
+carries `+`) leaves `access.log` and `error.log` as `root:root 0600`, and the
+unprivileged main process then dies with `open /var/log/xray/access.log:
+permission denied` (`status=23`). The unit re-owns both files on every start to
+undo that, but the rule to follow is simpler: run xray as `xray`, never as
+root.
 
 ## Point the System Resolver at the Local Stub
 
@@ -137,5 +164,9 @@ sudo systemctl enable --now xray-tproxy.service
 After start the unit asserts the policy rule, both tables and the `12345`
 listener, and enters the failed state if one is missing — a green status
 means proxying is wired. `journalctl -u xray-tproxy -n 50` names it.
+
+If it fails the way an earlier revision did, the file on the host is probably
+not the file this repository ships — see
+[Check the Installed Unit](verify-the-setup.md#check-the-installed-unit).
 
 Continue with [How to Verify the Setup](verify-the-setup.md).

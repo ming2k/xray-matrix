@@ -1,4 +1,15 @@
-# Scheme: VLESS + TCP + XTLS-Vision + TLS (with Web Fallback)
+# Scheme: VLESS + TCP + XTLS-Vision + TLS (Web Fallback) [Legacy / Corporate Profile]
+
+> ⚠️ **ARCHITECTURAL WARNING: DEPRECATED FOR GENERAL CENSORSHIP CIRCUMVENTION**
+>
+> In modern censorship environments (such as the Great Firewall of China), **this scheme is considered high-risk and obsolete for personal proxy use**:
+> 1. **Zero-Collateral-Damage SNI Blocking**: The TLS 1.3 `ClientHello` exposes your personal domain in plaintext SNI. Censors can block or RST this domain with zero impact on domestic services.
+> 2. **Certificate Transparency (CT) Log Harvesting**: All public CA certificates (Let's Encrypt / ZeroSSL) are published to global CT logs (RFC 6962). Censor crawlers monitor these streams in real-time, instantly discovering new subdomains mapped to foreign VPS providers.
+> 3. **NetFlow Flow Profiling**: A private low-traffic domain carrying continuous gigabyte-scale encrypted streams from single domestic IPs creates an immediate statistical anomaly in machine-learning traffic classifiers.
+>
+> **For standard censorship circumvention, use [VLESS + Vision + REALITY](../vless-xtls-vision-reality/README.md) instead.**
+>
+> This scheme is retained strictly for backwards compatibility and specialized corporate/institutional intranets where enterprise DPI enforces strict SNI-to-IP ASN verification.
 
 The domain scheme. The server terminates ordinary, publicly-trusted TLS with a
 certificate for a domain you own, and anything on that port which is not a
@@ -107,16 +118,76 @@ Here it matters twice: it removes the nested-TLS fingerprint from the tunnel,
 and it requires `streamSettings.network: tcp`, which is why this scheme is
 `VLESS + TCP`.
 
-## 4. When to Choose This Over REALITY
+## 4. Operational Limits & Anti-Censorship Risks
 
-1. **You already own a domain** and want standard, auditable TLS
-   infrastructure rather than a borrowed identity.
-2. **Corporate or academic firewalls** that correlate SNI with IP ASN
-   registries. A borrowed Apple name on a generic cloud IP raises an anomaly
-   score; your own domain matches its DNS records exactly.
-3. **Dual-use hosting** — the same IP and port can serve a blog, an API, or
-   static documentation to the public while proxying invisibly. The fallback
-   site makes that the natural configuration rather than a trick.
+While XTLS-Vision successfully destroys the TLS-in-TLS packet length fingerprint,
+the outer TLS layer with a personal domain introduces distinct operational and
+censorship vulnerabilities that do not exist in REALITY:
+
+### 4.1 Anti-Censorship Hazards
+
+1. **Plaintext SNI & Zero-Collateral-Damage Blocking**:
+   The domain name is transmitted in plaintext during the TLS 1.3 `ClientHello`
+   (unless ECH is active end-to-end). Unlike borrowing a high-reputation domain
+   (e.g., Apple, Microsoft, Akamai) where censors risk breaking essential domestic
+   services, a personal or newly registered domain carries **zero collateral damage**.
+   A censor can ban the domain at will via SNI-based TCP resets, DNS poisoning,
+   or route blacklisting without affecting any legitimate domestic traffic.
+
+2. **Certificate Transparency (CT) Log Proactive Scraping**:
+   Every certificate issued by public Certificate Authorities (Let's Encrypt,
+   ZeroSSL) is permanently published to public Certificate Transparency logs (RFC 6962).
+   Censors and automated scanners monitor CT log streams in near-real-time. A newly
+   registered subdomain pointing to a known foreign VPS hosting provider (e.g.,
+   Bandwagon, Vultr, DigitalOcean) immediately flags the IP and domain for
+   targeted active probing and traffic profiling.
+
+3. **Traffic Volume & Flow Profiling Mismatch**:
+   DPI flow analyzers (NetFlow/IPFIX) monitor connection persistence and throughput
+   relative to the host's apparent role:
+   - If the domain masquerades as a personal blog, docs site, or API endpoint,
+     genuine visitor traffic consists of brief, sporadic requests transferring
+     kilobytes to megabytes.
+   - Using that same domain to stream 4K video or transfer dozens of gigabytes
+     continuously to a single client IP creates a glaring behavioral anomaly
+     that machine-learning traffic classifiers readily flag.
+
+4. **`rejectUnknownSni` vs. Direct IP Probing**:
+   With `rejectUnknownSni: true`, incoming handshakes directed to the VPS IP
+   without an SNI (or with an unlisted SNI) are rejected at the TLS handshake level.
+   While standard for multi-tenant web servers, an isolated VPS exhibiting TLS
+   handshake aborts on direct IP access combined with high outbound traffic volume
+   is an observable heuristic for active scanner engines.
+
+### 4.2 When to Choose This Over REALITY
+
+- **DO NOT choose this scheme for general circumvention on an ephemeral VPS**:
+  If your primary goal is bypassing national firewalls (such as GFW) with a private
+  VPS, **prefer [VLESS + Vision + REALITY](../vless-xtls-vision-reality/README.md)**.
+  REALITY avoids personal domain costs, avoids CT log publication, and borrows
+  high-reputation SNIs that censors cannot easily blacklist.
+
+- **DO choose this scheme when**:
+  1. **Corporate or academic firewalls correlate SNI with IP ASN registries**:
+     A borrowed Apple name on a generic cloud IP raises an anomaly score in
+     enterprise DPI; your own domain matches its DNS records and ASN exactly.
+  2. **Dual-use hosting**: The same IP and port serves a genuine, heavily
+     trafficked website, API, or blog to the public, allowing proxy traffic to
+     blend naturally into legitimate multi-user web traffic.
+  3. **Standard, auditable TLS infrastructure**: You require genuine, valid PKI
+     certificates without borrowed identities.
+
+### 4.3 Mitigation & Operational Best Practices
+
+If you deploy this scheme:
+- **Avoid cheap, newly registered TLDs** (e.g., `.xyz`, `.top`): Use established,
+  reputable domains.
+- **Serve a realistic website**: Replace the placeholder `index.html` with an
+  authentic static site, personal blog, or API documentation to ensure probe
+  responses look genuine.
+- **Use DNS-01 API for certificates**: See [cert-guide.md](cert-guide.md); this
+  avoids opening port 80 for HTTP-01 challenges. Consider wildcard certificates
+  (`*.example.com`) to obscure the specific proxy subdomain in CT logs.
 
 ## 5. Deploying This Scheme
 

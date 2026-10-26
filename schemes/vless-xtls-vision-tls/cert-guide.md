@@ -80,3 +80,18 @@ Make it executable:
 ```sh
 sudo chmod +x /etc/letsencrypt/renewal-hooks/deploy/xray-reload.sh
 ```
+
+---
+
+## 5. Security & Censorship Hazard: Certificate Transparency (CT) Logs
+
+When obtaining a certificate from public authorities (Let's Encrypt, ZeroSSL), the issuance is automatically logged in public **Certificate Transparency (CT)** logs (RFC 6962).
+
+### The Threat
+1. **Automated Discovery**: Active censors and crawler bots continuously monitor CT log streams. A newly registered domain or subdomain pointing to an IP range of a foreign VPS provider (e.g., Bandwagon, Vultr, DigitalOcean) immediately flags your server.
+2. **Predictable Naming**: Subdomains containing words like `vpn`, `node`, `proxy`, or `xray` invite immediate targeted probing.
+
+### Mitigations
+- **Use generic subdomain names**: Use plausible names (e.g., `api`, `static`, `doc`, `assets`) rather than proxy-related keywords.
+- **Wildcard certificates**: Issuing a wildcard certificate (`*.example.com`) via DNS-01 challenge hides individual subdomains in CT log entries.
+- **Evaluate REALITY**: If domain exposure or CT log scraping presents an unacceptable risk, use [VLESS + Vision + REALITY](../vless-xtls-vision-reality/README.md) instead, which borrows third-party certificates and requires no domain registration.

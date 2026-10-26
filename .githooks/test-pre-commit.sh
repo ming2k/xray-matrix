@@ -51,7 +51,6 @@ run_case() {
 
 T=schemes/vless-xtls-vision-reality/zz-probe.json
 SRC=schemes/vless-xtls-vision-reality/client.json
-HOSTCFG=schemes/vless-xtls-vision-reality/client-jp.local.json
 REALIP=212.50.249.175
 
 # 0. control: nothing staged
@@ -93,8 +92,19 @@ sed 's|<UUID:a1b2c3d4-e5f6-7890-abcd-ef1234567890>|9f8e7d6c-5b4a-3210-fedc-ba987
 git add -f "$T"
 run_case "literal UUID in config" refuse
 
-# 8. the real host config renamed to a template name: the silent leak path
-cp "$HOSTCFG" "$T"
+# 8. the real host config renamed to a template name: the silent leak path.
+#    An operator file is the most faithful input, but the cases must not depend
+#    on one existing — a clone with no local config still has to exercise the
+#    path, so synthesize a filled-in config when none is present.
+HOSTCFG=$(ls schemes/vless-xtls-vision-reality/*.local.json 2>/dev/null | head -n 1)
+if [ -n "${HOSTCFG:-}" ]; then
+	cp "$HOSTCFG" "$T"
+else
+	sed -e "s|<SERVER_IP:203.0.113.10>|$REALIP|" \
+		-e 's|<UUID:a1b2c3d4-e5f6-7890-abcd-ef1234567890>|9f8e7d6c-5b4a-3210-fedc-ba9876543210|' \
+		-e 's|<PUBLIC_KEY:REDACTED_PUBLIC_KEY>|SGuVHaAwREi_8KKTRxM8u3jEV3Ite0KLgqIYLuBIKno|' \
+		"$SRC" > "$T"
+fi
 git add -f "$T"
 run_case "real host config under a template name" refuse
 

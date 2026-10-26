@@ -16,8 +16,19 @@ CapabilityBoundingSet=CAP_NET_BIND_SERVICE CAP_NET_ADMIN
 AmbientCapabilities=CAP_NET_BIND_SERVICE CAP_NET_ADMIN
 NoNewPrivileges=true
 
-# Refuse to start if configuration test fails
-ExecStartPre=+/usr/bin/xray run -test -config /etc/xray/config.json
+# Refuse to start if configuration test fails.
+#
+# LogsDirectory= owns the directory, not the files inside it: a root-run xray
+# (a manual `sudo xray run`, or this preflight while it carried `+`) creates
+# /var/log/xray/{access,error}.log as root:root 0600, and the unprivileged
+# main process then dies with `open /var/log/xray/error.log: permission denied`
+# (status=23). Re-assert ownership before every start.
+ExecStartPre=+/bin/bash -c 'install -d -m 0755 -o xray -g xray /var/log/xray; touch /var/log/xray/access.log /var/log/xray/error.log; chown xray:xray /var/log/xray/access.log /var/log/xray/error.log; chmod 0640 /var/log/xray/access.log /var/log/xray/error.log'
+
+# Without `+`: the preflight must run with the same identity as the main
+# process, otherwise it can read a config — or write a log — that the service
+# user cannot, and a permission defect only resurfaces as status=23 later.
+ExecStartPre=/usr/bin/xray run -test -config /etc/xray/config.json
 ExecStart=/usr/bin/xray run -config /etc/xray/config.json
 
 Restart=always

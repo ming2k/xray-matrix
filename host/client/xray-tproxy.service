@@ -28,9 +28,21 @@ ExecStartPre=+-/usr/sbin/nft delete table ip xray_v4
 ExecStartPre=+-/usr/sbin/nft delete table ip6 xray_v6
 ExecStartPre=+/usr/sbin/nft -f /etc/nftables/xray-tproxy.nft
 
+# LogsDirectory= owns the directory, not the files inside it. Every root-run
+# xray re-creates them as root:root 0600 — a manual `sudo xray run`, and this
+# unit's own preflight before it dropped the `+` — after which the unprivileged
+# main process dies with `open /var/log/xray/access.log: permission denied`
+# (status=23). Re-assert ownership here so that state cannot outlive a restart.
+ExecStartPre=+/bin/bash -c 'install -d -m 0755 -o xray -g xray /var/log/xray; touch /var/log/xray/access.log /var/log/xray/error.log; chown xray:xray /var/log/xray/access.log /var/log/xray/error.log; chmod 0640 /var/log/xray/access.log /var/log/xray/error.log'
+
 # Refuse to start on a config that does not load; a bad config must not
 # replace a working process with one running a half-empty ruleset.
-ExecStartPre=+/usr/bin/xray run -test -config /etc/xray/config.json
+#
+# Deliberately without `+`: the preflight must run with the same identity as
+# the main process. As root it reads a config the service user cannot read and
+# writes the logs as root, so a permission problem passes the preflight and
+# only resurfaces as status=23 in ExecStart.
+ExecStartPre=/usr/bin/xray run -test -config /etc/xray/config.json
 
 ExecStart=/usr/bin/xray run -config /etc/xray/config.json
 

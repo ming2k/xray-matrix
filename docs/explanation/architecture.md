@@ -49,6 +49,14 @@ The transport tunnel between client and server is decoupled from the underlying 
   nothing else. What each scheme does with an unauthenticated connection, and
   how they differ, is described in
   [Transport Schemes](../../schemes/README.md).
+- **The Socket & Netfilter Contract**: While schemes are pluggable, the client
+  datapath enforces a strict interface contract with Xray Core: the OS layer
+  provides `CAP_NET_ADMIN` and routes intercepted traffic to loopback port `12345`,
+  while Xray must bind with `IP_TRANSPARENT` (`sockopt.tproxy: "tproxy"`),
+  perform payload domain sniffing, and mark all dialing outbounds with
+  `sockopt.mark: 2` (`BYPASS_MARK`) to prevent infinite routing loops.
+  See [host/client/README.md](../../host/client/README.md) and
+  [Client Datapath Contract](../reference/host-artifacts.md#3-client-datapath-contract-xray-interface-requirements).
 
 ---
 

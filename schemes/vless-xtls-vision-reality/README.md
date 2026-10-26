@@ -7,6 +7,12 @@ active probe gets genuine Apple or Google TLS, not a refusal.
 
 - **Needs**: a VPS with a free port 443. No domain, no certificate, no web
   server, no renewal.
+- **If port 443 is already taken** by a website on the same host, this scheme
+  still applies but the port is owned by nginx as a layer-4 SNI demultiplexer and
+  the REALITY inbound moves to `127.0.0.1:10443`; follow
+  [How to Share Port 443 with an Existing Website](../../docs/how-to/share-port-443-with-a-website.md).
+  Note that `sockopt.acceptProxyProtocol` must stay off on a REALITY inbound — it
+  cannot parse the header and every handshake fails if it is enabled.
 - **Config**: [`client.json`](client.json) and [`server.json`](server.json)
   are complete and deployable; see [Key Generation](#5-key-generation) and
   [Configuration Files](#6-configuration-files).
@@ -132,11 +138,13 @@ git-ignored, so credentials never reach the repository.
 
 1. **Must support TLS 1.3 and HTTP/2** — verify with `curl -Iv https://<domain>`.
 2. **Geographically near the server**, ideally served by a CDN with an edge in
-   the server's region.
+   the server's region (RTT < 15ms).
 3. **Clean OCSP stapling.**
-4. Sites that are commonly used and stable, for example
-   `gateway.icloud.com:443`, `swdist.apple.com:443`, `dl.google.com:443`,
-   `update.microsoft.com:443`.
+4. **Traffic volume profile match** — choose domains naturally associated with
+   bulk downloads (OS mirrors, package repositories, driver distribution).
+5. Sites that are stable and appropriate for the server's region.
+
+For in-depth selection criteria, traffic volume profiling, timing defense against active probes, and curated candidate lists across Japan, the United States, Singapore, and Hong Kong, see [REALITY Target Selection and Traffic Camouflage](../../docs/explanation/reality-target-selection.md).
 
 Record the choice in the local copy: `dest` on the server and `serverName` on
 the client must name the same site, or the handshake fails closed.

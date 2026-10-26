@@ -1,4 +1,7 @@
-// Complete Server Configuration for VLESS + TCP + XTLS-Vision + TLS
+// Complete Server Configuration for VLESS + TCP + XTLS-Vision + TLS (Legacy / Corporate Profile)
+// ARCHITECTURAL WARNING: DEPRECATED FOR GFW EVASION.
+// Personal domain SNI is visible in plaintext (zero-collateral-damage blocking) and certificates
+// leak into public Certificate Transparency logs. For censorship circumvention, use REALITY instead.
 // Deploy to: /etc/xray/config.json
 {
   "log": {
@@ -31,8 +34,10 @@
         "network": "tcp",
         "security": "tls",
         "tlsSettings": {
+          // Rejects handshakes with missing or unlisted SNI before fallback logic.
+          // Note: Standard for virtual hosting, but direct IP scanning sees an aborted handshake.
           "rejectUnknownSni": true,
-          "minVersion": "1.2",
+          "minVersion": "1.3",
           "alpn": [
             "h2",
             "http/1.1"

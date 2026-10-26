@@ -43,6 +43,43 @@ ip route show table 110          # expect: local default dev lo
 sudo nft list tables             # expect: ip xray_v4 and ip6 xray_v6
 ```
 
+## Check the Installed Unit
+
+`systemctl status` proves a unit is *running*, not that it is the unit this
+repository ships. A stale `xray-tproxy.service` shadows nothing and fails
+nothing — it just behaves the way its own revision did, so a fixed start path
+can keep failing after the fix is committed.
+
+```sh
+sudo cmp /usr/lib/systemd/system/xray-tproxy.service ./host/client/xray-tproxy.service
+```
+
+Installed through `wright`, compare against the sealed source instead — the one
+the package actually built from:
+
+```sh
+sudo cmp /usr/lib/systemd/system/xray-tproxy.service \
+         /var/lib/wright/sources/xray-tproxy-xray-tproxy.service
+```
+
+`differ` on the first form means the repository is ahead of the host; run
+`sudo wright install xray-tproxy` (or the `install -Dm644` line from
+[How to Install and Start the Transparent Proxy](install-and-start.md#install-the-os-layer)).
+`differ` on the second form, right after a successful install, means the plan
+was edited but never re-sealed.
+
+Two lines are worth reading even when the files match:
+
+```sh
+systemctl cat xray-tproxy.service | grep -E '^(User|ExecStartPre)='
+```
+
+- `User=xray` — an older revision ran as `root`, which breaks the
+  `skuid "xray"` DNS-loop exemption in the ruleset.
+- The config preflight (`ExecStartPre=/usr/bin/xray run -test …`) has **no**
+  `+` in front: with `+` it runs as root and can pass while the real start
+  fails on a permission the service user does not have.
+
 ## Check That Traffic Is Intercepted
 
 The nftables rules carry packet counters. Generate some traffic, then

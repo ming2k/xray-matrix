@@ -2,6 +2,9 @@
 
 This guide walks through deploying the `vless-xtls-vision-tls` scheme, issuing a valid TLS certificate with Let's Encrypt, and configuring local Nginx to handle active probe deflection.
 
+> **Anti-Censorship Threat Model**:
+> This scheme is intended for environments requiring fully compliant, auditable TLS certificates (such as corporate firewalls checking SNI-to-IP ASN matching) or hosts serving authentic public web traffic. Because personal domains expose plaintext SNI and log to public Certificate Transparency records, review [Operational Limits & Anti-Censorship Risks](../../schemes/vless-xtls-vision-tls/README.md#4-operational-limits--anti-censorship-risks) before deploying this over REALITY.
+
 ---
 
 ## Prerequisites

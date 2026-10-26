@@ -16,8 +16,9 @@ one deployment come from the same scheme directory, so the values that must
 agree (UUID, `serverName`, short ID) are taken from a single source.
 
 The OS artifacts that do **not** depend on the scheme — nftables rules, unit
-files, sysusers entries, kernel tuning — live in `../host/client/` and
-`../host/server/`.
+files, sysusers entries, kernel tuning, and the
+[TProxy Datapath Contract](../host/client/README.md) — live in `../host/client/`
+and `../host/server/`.
 
 The two schemes share XTLS-Vision and a whole client datapath, and differ only
 in the outer security layer. Everything else about them — what the server
@@ -30,8 +31,9 @@ does with an unauthenticated connection — is in each scheme's `README.md`:
 
 ## 1. Scheme Comparison & Selection Matrix
 
-| Dimension | Scheme 1: VLESS + Vision + REALITY | Scheme 2: VLESS + Vision + TLS (Fallback) |
+| Dimension | Scheme 1: VLESS + Vision + REALITY (Standard) | Scheme 2: VLESS + Vision + TLS (Fallback) [Legacy / Corporate] |
 | :--- | :--- | :--- |
+| **Status** | **Production Standard (Recommended)** | **Legacy / Corporate Profile (Deprecated for GFW)** |
 | **Directory** | `schemes/vless-xtls-vision-reality/` | `schemes/vless-xtls-vision-tls/` |
 | **Protocol / Transport** | `vless` / `tcp` | `vless` / `tcp` |
 | **Flow Control** | `xtls-rprx-vision` | `xtls-rprx-vision` |
@@ -47,27 +49,30 @@ does with an unauthenticated connection — is in each scheme's `README.md`:
 | **0-RTT TFO Support** | Yes (`tcpFastOpen: true`) | Yes (`tcpFastOpen: true`) |
 | **SNI Visibility** | Foreign target domain (e.g. `gateway.icloud.com`) | Self-owned domain (e.g. `node.yourdomain.com`) |
 | **Censorship Vector** | VPS IP blocking if discovered | Domain SNI blocking, DNS poisoning, or VPS IP blocking |
+| **Anti-Censorship Exposure** | **Low**. Borrows high-reputation domain (collateral damage deters SNI bans); no CT log trace | **Critical**. Self-owned domain exposed in plain SNI; zero-collateral bans, CT log scraping & flow profiling |
 | **Maintenance Burden** | Near zero (no renewal, no web server) | Medium (certificate renewal, Nginx fallback maintenance) |
 | **Corporate / Strict Firewall** | Might raise alert if borrowed cert SNI mismatches IP ASN | 100% standard TLS; valid cert signed for genuine domain |
-| **Primary Use Case** | Ephemeral VPS, personal workstations, zero-domain setup | Long-term high-reputation servers, disguised as real websites |
+| **Primary Use Case** | Standard modern anti-censorship for workstations, routers, and VPS nodes | Specialized enterprise networks strictly enforcing SNI-to-IP ASN mapping |
 
 ---
 
 ## 2. Decision Tree: Which Scheme to Select?
 
 ```text
-Do you have a personal domain name pointing to your VPS?
-  ├── NO  ──> Use [VLESS + Vision + REALITY]
-  │           - Zero domain cost
-  │           - No certificate renewal
-  │           - High resilience against active scanners
+What is your threat model?
   │
-  └── YES ──> Are you operating under strict corporate DPI / ASN checking?
-                ├── YES ──> Use [VLESS + Vision + TLS with Web Fallback]
-                │           - Genuine CA certificate matches domain & IP
-                │           - Indistinguishable from real enterprise website
-                │
-                └── NO  ──> Either scheme works; REALITY has lower maintenance overhead.
+  ├── Circumventing nation-state censors (GFW) / Personal Anti-Censorship
+  │     └──> ALWAYS USE [VLESS + Vision + REALITY]
+  │           - Zero domain registration (zero personal identity exposure)
+  │           - Zero public Certificate Transparency (CT) log trace
+  │           - Borrows high-reputation SNI (high collateral damage prevents arbitrary bans)
+  │           - Layer 4 active scanner deflection to authentic upstream servers
+  │
+  └── Operating inside enterprise / academic intranets checking SNI-to-IP ASN matching
+        └──> Use [VLESS + Vision + TLS with Web Fallback] (Corporate Legacy Profile)
+              - ⚠️ HIGH RISK FOR GFW: Personal SNI has zero collateral damage; easily blocked
+              - ⚠️ Automated crawlers scrape CT logs upon Let's Encrypt certificate issuance
+              - ⚠️ Requires genuine public web traffic to avoid NetFlow flow-profiling anomalies
 ```
 
 ---

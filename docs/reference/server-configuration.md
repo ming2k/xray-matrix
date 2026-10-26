@@ -45,16 +45,31 @@ A server configuration contains four core sections:
 | Key | Type | Description |
 | :--- | :--- | :--- |
 | `show` | boolean | Set to `false` in production. |
-| `dest` | string | External target site and port (e.g., `gateway.icloud.com:443`). |
-| `xver` | integer | PROXY protocol version to dest (`0` = disabled). |
-| `serverNames` | array | SNI list to accept and match. |
+| `dest` | string | Target the unauthenticated branch is relayed to: the borrowed site's `host:port` (`gateway.icloud.com:443`), or a local TLS listener when the borrowed identity is your own site (`127.0.0.1:8443`). |
+| `xver` | integer | PROXY protocol version sent *to `dest`* (`0` = disabled). Only meaningful when `dest` is a local listener that expects a header; a real remote site would reject it. |
+| `serverNames` | array | SNI list to accept and match. Must contain the borrowed name verbatim, and must never contain a hostname that is itself CDN-proxied. |
 | `privateKey` | string | X25519 private key generated via `xray x25519`. |
-| `shortIds` | array | List of valid shortId hex strings (e.g. `["0123456789abcdef"]`). |
+| `shortIds` | array | Valid shortId hex strings, 0–16 hex chars; the empty string `""` is accepted and makes the client-side `shortId` optional. |
+
+### Compatibility Constraints
+
+- **`sockopt.acceptProxyProtocol` must not be set on a REALITY inbound.** REALITY
+  cannot consume the header: every handshake fails with
+  `tls: first record does not look like a TLS handshake` (reproduced on Xray
+  26.3.27 and 26.10.21). A front proxy that must speak PROXY protocol needs a
+  stripping hop that re-emits plain TCP — see
+  [How to Share Port 443 with an Existing Website](../how-to/share-port-443-with-a-website.md).
+- **`xver` on a REALITY inbound is not the web-fallback mechanism.** It applies
+  to the relay target only; the local web fallback with client-address
+  preservation belongs to the TLS scheme's `settings.fallbacks` object.
+- **`dest` must not point at a CDN-proxied name of your own.** Probes would be
+  answered by your own site's identity, which removes the scheme's camouflage.
 
 ### TLS Settings (`streamSettings.tlsSettings`)
 | Key | Type | Description |
 | :--- | :--- | :--- |
 | `rejectUnknownSni` | boolean | `true` drops connections scanning raw IP without valid domain SNI. |
+| `minVersion` | string | `"1.3"` strictly enforces TLS 1.3 (required for XTLS-Vision; prevents TLS downgrade). |
 | `alpn` | array | `["h2", "http/1.1"]` to support HTTP/2 and HTTP/1.1. |
 | `certificates` | array | Path to `fullchain.pem` and `privkey.pem`. |
 | `ocspStapling` | integer | Cache duration in seconds for OCSP responses (e.g. `3600`). |
