@@ -160,7 +160,7 @@ See the [Documentation Index](docs/index.md):
 
 ### Reference & Mechanism Deep Dives
 - [Transport Schemes Matrix](schemes/README.md)
-- [XTLS-Vision Mechanism](docs/explanation/mechanisms/xtls-vision.md)
+- [XTLS-Vision Mechanism](docs/explanation/xtls-vision.md)
 - [REALITY Scheme](schemes/vless-xtls-vision-reality/README.md)
 - [TLS + Fallback Scheme](schemes/vless-xtls-vision-tls/README.md)
 - [Architecture](docs/explanation/architecture.md)

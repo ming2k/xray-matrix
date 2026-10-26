@@ -55,7 +55,7 @@ The guides below are split by which host you are setting up.
 ### Cryptographic & Anti-Censorship Mechanisms
 | Page | Topic |
 |------|-------|
-| [XTLS-Vision Mechanism](explanation/mechanisms/xtls-vision.md) | TLS-in-TLS padding obfuscation and Linux kernel zero-copy splice (shared by both schemes) |
+| [XTLS-Vision Mechanism](explanation/xtls-vision.md) | TLS-in-TLS padding obfuscation and Linux kernel zero-copy splice (shared by both schemes) |
 
 ## Contributor
 

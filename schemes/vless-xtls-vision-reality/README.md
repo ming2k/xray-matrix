@@ -78,7 +78,7 @@ an unauthenticated client it *is* a relay to that site.
 Vision is shared with the TLS-fallback scheme, so its full mechanism — the
 TLS-in-TLS length signature it destroys, the randomized padding of the
 handshake stage, and the kernel `splice()` transfer of the data stage — lives
-in the explanation section: [XTLS-Vision Mechanism](../../docs/explanation/mechanisms/xtls-vision.md).
+in the explanation section: [XTLS-Vision Mechanism](../../docs/explanation/xtls-vision.md).
 
 What it means for this scheme: the traffic inside the REALITY tunnel no longer
 shows the deterministic record-size correlation that machine-learning DPI

@@ -101,7 +101,7 @@ and never reaches Xray's fallback logic at all.
 Shared with the REALITY scheme, so the full mechanism — the TLS-in-TLS length
 signature it destroys, the randomized padding of the handshake stage, and the
 kernel `splice()` transfer of the data stage — lives in the explanation
-section: [XTLS-Vision Mechanism](../../docs/explanation/mechanisms/xtls-vision.md).
+section: [XTLS-Vision Mechanism](../../docs/explanation/xtls-vision.md).
 
 Here it matters twice: it removes the nested-TLS fingerprint from the tunnel,
 and it requires `streamSettings.network: tcp`, which is why this scheme is
