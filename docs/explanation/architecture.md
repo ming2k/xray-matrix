@@ -73,18 +73,25 @@ See [Traffic Selection Reference](../reference/traffic-selection.md) and [Data P
 
 ---
 
-## 4. Component Ownership Boundaries
+## 4. Component Ownership
 
-| Component | Owner |
-| :--- | :--- |
-| **Client nftables tables (`xray_v4` / `xray_v6`)** | `xray-tproxy.service` (`ExecStartPre` loads, `ExecStopPost` removes on explicit stop) |
-| **Client Table 110 routes** | `xray-tproxy.service` (`ExecStartPre`) |
-| **Client fwmark policy rule** | `systemd-networkd` drop-in (`xray-policy.conf`), installed per uplink; unit repairs if missing |
-| **Client Xray daemon** | `xray-tproxy.service`, running as unprivileged user `xray` |
-| **Server Kernel Tuning** | `sysctl.d/99-xray-tuning.conf` (BBR, TFO, socket buffers) |
-| **Server Firewall** | `host/server/xray-server.nft` |
-| **Server Xray daemon** | `xray-server.service`, running as unprivileged user `xray` with `CAP_NET_BIND_SERVICE` |
-| **Server Web Fallback** | Local Nginx or Caddy listening on `127.0.0.1:8080` |
+Ownership is exclusive: each piece of kernel state has exactly one writer, so
+recovery is deterministic and no component has to guess whether another has
+already done its part.
+
+| State or component | Owner | Why that owner |
+| :--- | :--- | :--- |
+| Client nftables tables | the client unit | It loads them on every start, so a `flush ruleset` cannot leave a half-broken state |
+| Client table-110 routes | the client unit | Same lifecycle as the tables |
+| Client fwmark policy rule | the networkd uplink drop-in | networkd is the component that knows the uplink was reconfigured; the unit repairs the rule but never removes it |
+| Both Xray daemons | their units, as the unprivileged `xray` user | Least privilege, and the account name is itself part of the ruleset's contract |
+| Server firewall | the server host's own nftables configuration | Independent of Xray's lifecycle |
+| Server kernel tuning | the server host's sysctl configuration | Applied at boot, not per service start |
+| Web fallback | a separate local web server | It must outlive Xray restarts, so the Xray unit cannot own it |
+
+The concrete files, sysctl keys, sandbox flags and start/stop sequences behind
+this table are lookup material:
+[Host Artifacts Reference](../reference/host-artifacts.md).
 
 ---
 

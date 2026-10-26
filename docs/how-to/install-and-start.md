@@ -1,8 +1,8 @@
 # How to Install and Start the Transparent Proxy
 
-Install the full setup on a bare system. For the shortest command-only
-path, follow the [Quick Start](../../README.md#quick-start); this guide
-explains each step and covers the optional parts.
+Install the full setup on a bare system. The literal command sequence lives in
+the [Quick Start](../../README.md#quick-start); this guide explains what each
+step does, why the order matters, and covers the parts the Quick Start omits.
 
 ## Prerequisites
 
@@ -20,9 +20,10 @@ You also need:
   which is why the unit refuses to start on a config that fails
   `xray run -test`.
 
-- a VLESS+Reality server. See
-  [Server Config Template](../../schemes/vless-xtls-vision-reality/server.json)
-  if you run your own.
+- a server running the **same scheme** you deploy on the client, or your own.
+  The shipped server configs are
+  [REALITY](../../schemes/vless-xtls-vision-reality/server.json) and
+  [TLS](../../schemes/vless-xtls-vision-tls/server.json).
 - `systemd-resolved` (or another local resolver) and an uplink managed by
   `systemd-networkd`.
 
@@ -40,7 +41,11 @@ The split is by whether a value differs per host:
 | `schemes/<scheme>/client.json` | operator | `/etc/xray/config.json`, mode `600` — holds the user ID and the scheme key |
 | `host/client/xray-policy.conf` copied into an uplink profile | operator | `/etc/systemd/network/<uplink>.network.d/` — the profile name is host-specific |
 
-## Install the Solution
+## Install the OS Layer
+
+The Quick Start installs the four `host/client/` files straight to their system
+destinations. The alternative is the `wright` packaging, which performs the
+same placement and pulls the upstream dependencies in with it:
 
 ```sh
 sudo install -Dm644 ./host/client/xray-tproxy.service        /var/lib/wright/plans/xray-tproxy/xray-tproxy.service
@@ -50,19 +55,18 @@ sudo install -Dm644 ./host/client/xray-tproxy.sysusers.conf  /var/lib/wright/pla
 sudo wright install xray-tproxy          # pulls xray and v2ray-rules-dat in
 ```
 
-This places `/usr/bin/xray`, the unit, `/etc/nftables/xray-tproxy.nft` (an
-`/etc` file the package owns, so upgrades keep your edits), the `xray`
-service account via sysusers, and the networkd template. Installing by hand
-instead works the same way — put each file at the destination in the table
-above and run `systemd-sysusers`.
+Either route leaves the same state: `/usr/bin/xray`, the unit, the `xray`
+service account via sysusers, and the networkd template.
 
-`/etc/nftables/xray-tproxy.nft` is loaded by the unit's `ExecStartPre` and
-removed on an explicit stop, so `systemctl restart nftables` cannot leave a
-half-broken state.
+Two consequences of the unit owning the datapath, whichever route you take:
 
-The unit sets `XRAY_LOCATION_ASSET=/usr/share/v2ray-rules-dat`; change that
-line if your `geoip.dat` / `geosite.dat` live elsewhere. A unit in
-`/etc/systemd/system/` shadows the packaged one; remove it.
+- **`/etc/nftables/xray-tproxy.nft` is an `/etc` file the unit owns.** It is
+  loaded by `ExecStartPre` and removed on an explicit stop, so
+  `systemctl restart nftables` cannot leave a half-broken state, and an upgrade
+  will not overwrite your edits silently.
+- **A unit in `/etc/systemd/system/` shadows the packaged one.** Older local
+  copies set `User=root`, which breaks the `skuid "xray"` DNS-loop exemption
+  in the ruleset. Remove the shadowing unit rather than editing it.
 
 ## Install the Policy-Rule Drop-In
 
@@ -93,26 +97,21 @@ echo '110 xray' | sudo tee -a /etc/iproute2/rt_tables
 
 ## Create the Xray Client Config
 
-Start from the template in the scheme directory you chose, keep a copy beside
-it as `client.local.json`, fill in every `<PLACEHOLDER:...>` (see the
-[Client Configuration Reference](../reference/client-configuration.md#placeholders)),
-and validate before installing:
+The commands are Quick Start step 2. Beyond running them, three things are
+worth knowing:
 
-```sh
-S=./schemes/vless-xtls-vision-reality
-cp $S/client.json $S/client.local.json
-$EDITOR $S/client.local.json
-xray run -test -config $S/client.local.json                  # Configuration OK
-sudo install -Dm600 $S/client.local.json /etc/xray/config.json
-```
+- **Fill in every placeholder.** The template is not a working config until
+  then; the full list is in the
+  [Client Configuration Reference](../reference/client-configuration.md#placeholders).
+- **Keep the filled-in copy as `client.local.json`, beside its template.** The
+  suffix is git-ignored, so per-host credentials stay out of the repository,
+  and the template stays clean for the next host.
+- **`xray run -test` is the unit's own preflight**, so run it before installing:
+  a config that fails never replaces a working one. `sudo nft -c -f
+  ./host/client/xray-tproxy.nft` does the same for the ruleset.
 
-The `.local.json` suffix is git-ignored, so per-host credentials stay out of
-the repository. `xray run -test` is the check the unit runs before starting,
-so a bad config never replaces a working process; `sudo nft -c -f
-./host/client/xray-tproxy.nft` does the same for the ruleset.
-
-`LogsDirectory=xray` makes the unit create and own `/var/log/xray`.
-
+The service writes to `/var/log/xray`; `LogsDirectory=xray` makes the unit
+create and own that directory, so nothing has to pre-create it.
 
 ## Point the System Resolver at the Local Stub
 
@@ -122,6 +121,11 @@ On a `systemd-resolved` host:
 sudo ln -sfn /run/systemd/resolve/stub-resolv.conf /etc/resolv.conf
 resolvectl status
 ```
+
+The client config's `localhost` DNS entry queries this stub, which is how
+portal probes reach the current network's DHCP resolver. Why that path needs
+its own nftables exemption is explained in
+[Real-IP DNS Architecture](../explanation/dns.md).
 
 ## Start the Service
 

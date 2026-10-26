@@ -25,12 +25,12 @@ Application -> System Resolver -> Port 53 -> nftables TProxy -> Xray dokodemo-do
 
 Xray's `localhost` DNS server and `systemd-resolved` both emit ordinary port-53 packets. Without an exemption, nftables re-intercepts them — Xray's query to `127.0.0.53` is handed back to Xray itself, and resolved's forward to the DHCP upstream is dragged back too. The localhost path then starves: private and portal domains time out, and with a `finalQuery` truncation every unlisted domain dies with them.
 
-The `xray-tproxy.nft` rules break this loop with two complementary exemptions, both keyed on `meta mark 0` so already-intercepted application queries (fwmark 1) keep flowing to Xray:
-
-| Chain | Match | Effect |
-|-------|-------|--------|
-| `output` | `meta skuid "xray"` / `"systemd-resolve"`, `dport 53` | their own DNS packets leave unmarked and never reach the interception rules |
-| `prerouting` (IPv4) | `ip daddr 127.0.0.53`, `dport 53` | a looped-back unmarked packet reaches the resolver stub instead of the TProxy redirect |
+The ruleset breaks this loop with two complementary exemptions, both keyed on
+`meta mark 0` so already-intercepted application queries (fwmark 1) keep
+flowing to Xray: one in the `output` chain, for the `xray` and
+`systemd-resolve` users' own queries, and one in the IPv4 `prerouting` chain,
+for unmarked packets addressed to the resolver stub. The exact matches are in
+the [Traffic Selection Reference](../reference/traffic-selection.md).
 
 The prerouting rule is required because locally generated packets traverse `output` once and then enter `prerouting` again on the loopback path; exempting only `output` leaves the second interception alive. The IPv6 table carries no destination exemption: the systemd-resolved stub listens on IPv4 loopback only (`127.0.0.53`), so only the per-user rules apply there.
 

@@ -8,8 +8,8 @@ active probe gets genuine Apple or Google TLS, not a refusal.
 - **Needs**: a VPS with a free port 443. No domain, no certificate, no web
   server, no renewal.
 - **Config**: [`client.json`](client.json) and [`server.json`](server.json)
-  are complete and deployable; see [Key Generation](#key-generation) and
-  [Configuration Files](#configuration-files).
+  are complete and deployable; see [Key Generation](#5-key-generation) and
+  [Configuration Files](#6-configuration-files).
 
 ---
 

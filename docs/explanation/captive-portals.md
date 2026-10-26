@@ -51,5 +51,5 @@ sudo systemctl stop xray-tproxy.service
 sudo systemctl start xray-tproxy.service
 ```
 
-The unit's `ExecStopPost` teardown restores plain networking completely and safely; see [Architecture](architecture.md#component-ownership).
+The unit's `ExecStopPost` teardown restores plain networking completely and safely; see [Architecture](architecture.md#4-component-ownership).
 

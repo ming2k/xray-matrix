@@ -62,5 +62,5 @@ The tables are not part of `/etc/nftables.conf`: the unit recreates them on
 every start and removes them on an explicit stop, so a `flush ruleset`
 cannot leave a half-broken state. The `fwmark 1 -> table 110` policy rule is
 owned elsewhere — by the networkd drop-in `xray-policy.conf`, one per uplink
-profile. See [Architecture](../explanation/architecture.md#component-ownership).
+profile. See [Architecture](../explanation/architecture.md#4-component-ownership).
 

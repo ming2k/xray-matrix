@@ -11,7 +11,7 @@ Match your symptom and apply the fix.
 | Xray fails to start | bad config, missing geodata, or missing log directory | `sudo -u xray xray run -test -config /etc/xray/config.json`; read the journal (`xray-tproxy preflight:` means the datapath, not the config, is the problem) |
 | Service fails with `status=217/USER` | the `xray` user does not exist | `sudo useradd --system --no-create-home --shell /usr/bin/nologin xray` |
 
-| `geoip:cn` / `geosite:cn` rules never match | `geoip.dat` / `geosite.dat` not found | `XRAY_LOCATION_ASSET` must point at the directory holding the data files (the unit sets `/usr/share/v2ray-rules-dat`); the unit refuses to start when a referenced tag cannot be loaded — see [Two Kinds of Artifact](install-and-start.md#two-kinds-of-artifact) |
+| `geoip:cn` / `geosite:cn` rules never match | `geoip.dat` / `geosite.dat` not found | `XRAY_LOCATION_ASSET` must point at the directory holding the data files (the unit sets `/usr/share/v2ray-rules-dat`); the unit refuses to start when a referenced tag cannot be loaded — see [Where Each File Goes](install-and-start.md#where-each-file-goes) |
 | A domain in `geosite:cn` fails DNS but resolves from another network | Domestic resolver returns an address the app cannot reach directly | Check with `getent ahostsv4 <domain>`; if the domestic answer is genuinely wrong, list the domain in the DoH entry — but do not re-introduce `expectedIPs`, it causes this; see [DNS](../explanation/dns.md) |
 | Only unlisted/new domains fail DNS (e.g. `edge.prelude.dev`), geosite domains fine | `localhost` DNS server has `finalQuery: true`, truncating the fallback list | replace with `skipFallback: true`; see [DNS](../explanation/dns.md#the-dns-loop-hazard) |
 | Portal probes (`captive.apple.com` etc.) time out; `resolvectl query` works but `getent` hangs | localhost DNS path re-intercepted: missing nft exemption for `xray`/`systemd-resolve` users | reinstall `xray-tproxy.nft` and restart the service; see [DNS](../explanation/dns.md#the-dns-loop-hazard) |
@@ -33,7 +33,7 @@ ip rule show                     # fwmark 0x1 lookup 110 missing?
 A missing `fwmark` rule with the other two intact is the signature of the
 networkd reconfiguration problem. The fix is the drop-in described in
 [How to Install and Start the Transparent Proxy](install-and-start.md#install-the-policy-rule-drop-in);
-background is in [Architecture](../explanation/architecture.md#suspend-and-resume).
+background is in [Architecture](../explanation/architecture.md#suspend-and-resume-resiliency).
 
 ## Silent Bypass
 

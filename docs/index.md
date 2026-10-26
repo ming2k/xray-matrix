@@ -39,6 +39,7 @@ The guides below are split by which host you are setting up.
 | [Client Configuration Reference](reference/client-configuration.md) | Client Xray keys, placeholders, and routing rules |
 | [Server Configuration Reference](reference/server-configuration.md) | Server Xray keys, fallbacks, and stream settings |
 | [Traffic Selection Reference](reference/traffic-selection.md) | What nftables intercepts and what it bypasses |
+| [Host Artifacts Reference](reference/host-artifacts.md) | Service accounts, unit ownership and lifecycle, sandbox flags, kernel tuning |
 
 ## Explanation
 

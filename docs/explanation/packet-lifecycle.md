@@ -36,26 +36,29 @@ Instead of brute-force global gateway hijacking or heavy virtual TUN interfaces,
 +-----------------------------------------------------------------------------+
 ```
 
-### Layer 1: Kernel Netfilter Constraints (`xray-tproxy.nft`)
-The `prerouting` and `output` chains enforce strict constraint ordering:
-1. **Self-Loop Bypass (`meta mark 2 return`)**: Any packet originating from Xray outbounds carries `mark 2` and immediately exits the chain.
-2. **ICMP Bypass (`ip protocol icmp return`)**: Native ping, traceroute, and path MTU discovery stay direct and low-latency.
-3. **DNS Loop Exemption (`meta skuid ... dport 53 meta mark 0 return`; IPv4 prerouting `ip daddr 127.0.0.53 dport 53 meta mark 0 return`)**: Keeps the `localhost` DNS path alive — Xray's own stub queries and systemd-resolved's upstream forwards leave unmarked instead of being re-intercepted. Evaluated before the port-53 interception rules (see [DNS](dns.md#the-dns-loop-hazard)).
-4. **DNS Priority Interception (`dport 53 -> mark 1`)**: Evaluated **before** private IP bypasses. This prevents LAN gateways (e.g. `192.168.1.1:53`) from receiving unencrypted DNS queries for blocked overseas domains.
-5. **LAN / Reserved IP Bypass (`ip daddr $RESERVED_IP return`)**: Non-DNS traffic to router admin portals, local NAS, SSH servers, and LAN devices stays 100% direct.
-6. **Intercept Candidate Marking (`ip protocol tcp/udp -> mark 1`)**: All remaining outbound traffic is tagged with `fwmark 1`.
+### What each layer is allowed to decide
 
-### Layer 2: Kernel Policy Routing Constraints (`xray-policy.conf`)
-* **Priority 32765 (`fwmark 1 lookup 110`)**: Sits just above `Table main` (32766) and below `Table local` (0).
-* **Table 110 (`local default dev lo`)**: Instructs the kernel that packets directed to table 110—regardless of their external destination IP—are locally destined and must be handed to loopback sockets with `IP_TRANSPARENT` enabled.
+The three layers are not three passes over the same decision. Each one answers
+a question the others cannot:
 
-### Layer 3: Application-Level Classification (`/etc/xray/config.json`)
-* **Sniffing Engine (`routeOnly: true`)**: Inspects initial handshakes to extract real domain names even when apps connect via raw IP addresses.
-* **Three-Tier Smart DNS**:
-  - `geosite:private`, `geosite:captive-portal`, `domain:local` -> `localhost` (system resolver / DHCP DNS), pinned via `skipFallback: true`.
-  - `geosite:cn` -> `223.5.5.5` (Domestic fast Anycast).
-  - Overseas / Blocked domains -> `https://1.1.1.1/dns-query` (Encrypted DoH via proxy tunnel); unlisted domains fall back to the same DoH.
-* **Outbound Socket Marking (`sockopt.mark: 2`)**: Guarantees Layer 1 bypass for all outbound traffic.
+- **Netfilter** decides nothing about the destination. It marks candidates for
+  interception and exempts what must not be touched — Xray's own outbound
+  sockets, the DNS path, ICMP, and anything local. It never looks at a name.
+- **Policy routing** decides nothing about the application. It takes a mark and
+  hands the packet to loopback *with the original destination intact*, which
+  is the single trick that makes a transparent proxy possible: Xray can still
+  see where the packet was really going.
+- **Xray** decides everything else, because it is the only layer that knows
+  domains. Every policy about what to proxy, what to bypass, and how to resolve
+  lives here and nowhere else.
+
+Within each layer the order of the rules is load-bearing — in particular, DNS
+must be intercepted before the LAN and reserved-range bypasses, or queries on
+their way to a router's resolver travel in plaintext. The exact rule order,
+mark values, route contents and DNS server list are lookup material, not
+architecture: see the
+[Traffic Selection Reference](../reference/traffic-selection.md) and
+[Real-IP DNS Architecture](dns.md).
 
 ---
 
@@ -112,16 +115,26 @@ sequenceDiagram
 
 ---
 
-## 3. System Invariants and Safety Guarantees
+## 3. System Invariants
 
-1. **Loop-Free Invariant**:
-   Xray outbound sockets explicitly set `sockopt.mark: 2`. The very first rule in both nftables chains is `meta mark 2 return`. Outbound proxy streams never re-enter the proxy inbound.
+Four properties hold at all times, and each one is why a whole class of bug
+cannot happen here.
 
-2. **Zero-Leakage DNS Invariant**:
-   By matching `dport 53` before `ip daddr 192.168.0.0/16 return`, DNS requests destined for local ISP routers cannot bypass the proxy. Blocked domain lookups cannot be poisoned by uplink GFW middleboxes.
+1. **Loop-free.** Xray's own outbound sockets are marked, and that mark is the
+   first thing both nftables chains test. A tunnel packet therefore cannot be
+   intercepted a second time, whatever else the ruleset contains.
+2. **No plaintext DNS escape.** Port 53 is intercepted before any IP-range
+   bypass, so a query aimed at a local ISP resolver is still resolved through
+   Xray, and a poisoned answer from an uplink middlebox is never reachable.
+3. **The host's own routing is untouched.** Table `main` and the default
+   gateway are never rewritten; the proxy lives entirely in a separate routing
+   table. Stopping the service therefore restores direct networking in one
+   step instead of by undoing a rewrite.
+4. **No stale tunnels.** Keepalive is configured on every outbound, so a
+   connection whose peer vanished during a suspend or a Wi-Fi roam is detected
+   and replaced rather than stalling the application's socket.
 
-3. **Clean Route Table Invariant**:
-   `Table main` remains completely untouched. The default gateway is never overwritten. If `xray-tproxy.service` is stopped, `ExecStopPost` flushes Table 110 and removes nftables tables, restoring direct networking in milliseconds.
-
-4. **Zero-Stale-Socket Invariant**:
-   All outbounds configure `tcpKeepAliveIdle: 15` and `tcpKeepAliveInterval: 5`. When waking from sleep or roaming between Wi-Fi networks, dead TCP connections are detected and purged within 20 seconds.
+What implements each invariant — rule order, mark values, route contents,
+keepalive settings — is lookup material:
+[Traffic Selection Reference](../reference/traffic-selection.md) and
+[Host Artifacts Reference](../reference/host-artifacts.md).
