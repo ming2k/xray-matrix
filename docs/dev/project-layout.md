@@ -40,6 +40,8 @@ one directory under `schemes/` and leaves `host/` alone.
 | `host/server/xray-server.nft` | Minimal stateful server firewall |
 | `host/server/fallback/nginx/` | Fallback web server configuration and disguise site |
 | `host/server/fallback/caddy/` | Alternative Caddy reverse proxy fallback configuration |
+| `.githooks/pre-commit` | Refuses to commit host-specific values; activate with `git config core.hooksPath .githooks` |
+| `.githooks/test-pre-commit.sh` | Cases for that guard; run it after editing the hook |
 | `docs/` | Documentation; governance in `docs/dev/documentation/` |
 
 ## Packaging
@@ -76,5 +78,6 @@ next to the scheme template.
 - New documentation: route it with [Routing](documentation/routing.md); never add files to `docs/dev/documentation/` itself.
 - New transport schemes: add a subfolder under `schemes/<scheme-name>/` containing `client.json`, `server.json`, and `README.md` — nothing else, unless the scheme needs its own extra artifact (for example `vless-xtls-vision-tls/cert-guide.md`).
 - New OS artifacts: keep them under `host/client/` or `host/server/`, never inside a scheme.
-- Operator copies with credentials: name them `*.local.json` beside the template they came from; never commit them.
+- Operator copies with credentials: name them `*.local.json` beside the template they came from; they are git-ignored, and the commit guard refuses them if they are staged anyway.
+- A new class of secret to guard against: add a case to `.githooks/test-pre-commit.sh` first, then teach `.githooks/pre-commit` about it.
 - Diagnostic output (`xray-tproxy-diagnose-*.txt`): never committed; covered by `.gitignore`.

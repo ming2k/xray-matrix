@@ -48,10 +48,15 @@ rules become active.
   history is permanent it is still there; the key was superseded, which is the
   only reason it is not a live exposure. Treat every committed example value as
   public, because it is.
-- The residual hole `.gitignore` cannot close: filling real values into
-  `schemes/<scheme>/client.json` itself. Ignore rules do not apply to tracked
-  files, so that config would be committed on the next `git add`. Keep host
-  values in the `.local.json` copy.
+- `.gitignore` cannot protect a file git already tracks, so filling real values
+  into `schemes/<scheme>/client.json` itself would be committed on the next
+  `git add`. `.githooks/pre-commit` closes that path: it inspects what is
+  staged, so it also catches `git add -f` and a template filled in place.
+  Activate it once per clone with `git config core.hooksPath .githooks`, and
+  run its test after editing it: `sh .githooks/test-pre-commit.sh`. Do not
+  reach for `--no-verify` without a written reason. This is repository
+  hygiene, not host automation — the rule against installer scripts and
+  timers is about what runs on a deployed host.
 - `host/client/xray-tproxy.nft` changes should keep the bypass semantics
   documented in `docs/reference/traffic-selection.md` in sync.
 - A scheme config is complete and self-contained, so a scheme directory may

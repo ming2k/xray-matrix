@@ -1,0 +1,127 @@
+#!/bin/sh
+# Refuse to commit host-specific values.
+#
+# Activate once per clone:
+#   git config core.hooksPath .githooks
+#
+# What this adds over .gitignore: ignore rules only apply to files git is not
+# already tracking, and "git add -f" bypasses them entirely. This hook looks at
+# what is actually staged, so it also catches a template that was filled in
+# place — the one path that silently commits real credentials.
+#
+# Escape hatch, for a deliberate exception:  git commit --no-verify
+
+set -eu
+
+staged=$(git diff --cached --name-only --diff-filter=ACMR)
+[ -n "$staged" ] || exit 0
+
+refused=0
+refuse() {
+	printf '\nREFUSED  %s\n' "$*" >&2
+	refused=1
+}
+
+# Mask a value before printing it: enough to locate, not enough to leak.
+mask() { printf '%s…' "$(printf '%s' "$1" | cut -c1-6)"; }
+
+# --- 1. Files that must never be committed --------------------------------
+for f in $staged; do
+	case $f in
+	*.local.json)
+		refuse "$f: host-specific config. Copy a template to this name to fill
+         it in, and keep it out of git — it holds the address, UUID and key."
+		;;
+	*.pem | *.key | *.p12 | *.pfx | *.jks)
+		refuse "$f: certificate or key material. Certificates live in
+         /etc/letsencrypt on the server, never in the repository."
+		;;
+	esac
+done
+
+# --- 2. Values inside a committed config ----------------------------------
+#
+# Checked twice, because the two ways a secret gets committed are different:
+#   (a) a literal pasted where a placeholder used to be
+#   (b) a real value pasted *into* a placeholder, which still looks like a
+#       template — this is how a REALITY private key was once committed.
+RE_IP='([0-9]{1,3}\.){3}[0-9]{1,3}'
+RE_UUID='[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}'
+RE_KEY='[A-Za-z0-9_-]{43}'
+
+# Addresses that are legitimate in a shipped config: reserved and documentation
+# ranges, plus the public resolvers the datapath names.
+ALLOWED_IP='^(0\.|10\.|127\.|169\.254\.|172\.(1[6-9]|2[0-9]|3[01])\.|192\.(0\.0\.|0\.2\.|88\.99\.|168\.)|198\.(1[89]|51\.100)\.|203\.0\.113\.|100\.64\.|22[4-9]\.|2[3-5][0-9]\.|1\.1\.1\.1$|1\.0\.0\.1$|223\.5\.5\.5$|8\.8\.8\.8$|8\.8\.4\.4$|9\.9\.9\.9$|119\.29\.29\.29$)'
+
+# The deliberately fake identities shipped in the templates.
+FAKE_UUID='^(a1b2c3d4-e5f6-7890-abcd-ef1234567890|00000000-0000-0000-0000-000000000000)$'
+
+for f in $staged; do
+	case $f in
+	docs/*) continue ;; # examples in prose are not credentials
+	*.json) ;;
+	*) continue ;;
+	esac
+
+	content=$(git show ":$f" 2>/dev/null || true)
+	[ -n "$content" ] || continue
+
+	# (a) placeholders removed: what is left must contain no secret at all
+	stripped=$(printf '%s\n' "$content" | sed -E 's/<[A-Z_0-9]+:[^<>]*>//g')
+
+	if found=$(printf '%s\n' "$stripped" | grep -oE "\b$RE_UUID\b" | sort -u); then
+		for v in $found; do
+			refuse "$f: literal UUID outside a placeholder: $(mask "$v")"
+		done
+	fi
+
+	if found=$(printf '%s\n' "$stripped" | grep -oE "(^|[^A-Za-z0-9_-])$RE_KEY([^A-Za-z0-9_-]|$)" | grep -oE "$RE_KEY" | sort -u); then
+		for v in $found; do
+			refuse "$f: key-looking literal (43 chars) outside a placeholder: $(mask "$v")"
+		done
+	fi
+
+	if found=$(printf '%s\n' "$stripped" | grep -oE "\b$RE_IP\b" | sort -u); then
+		for v in $found; do
+			if ! printf '%s' "$v" | grep -qE "$ALLOWED_IP"; then
+				refuse "$f: routable address outside a placeholder: $(mask "$v")"
+			fi
+		done
+	fi
+
+	# (b) placeholder inner values: a template's example must be obviously fake
+	inners=$(printf '%s\n' "$content" | grep -oE '<[A-Z_0-9]+:[^<>]*>' |
+		sed -E 's/^<[A-Z_0-9]+://; s/>$//' || true)
+
+	for v in $inners; do
+		case $v in
+		'' | *'<'*) continue ;;
+		esac
+		if printf '%s' "$v" | grep -qE "^$RE_KEY$"; then
+			refuse "$f: real-looking key inside a placeholder: $(mask "$v")
+         An example value must be obviously fake: REDACTED, example, a1b2c3d4-…"
+		fi
+		if printf '%s' "$v" | grep -qE "^$RE_UUID$" &&
+			! printf '%s' "$v" | grep -qE "$FAKE_UUID"; then
+			refuse "$f: real-looking UUID inside a placeholder: $(mask "$v")
+         Use a1b2c3d4-e5f6-7890-abcd-ef1234567890 as the example value."
+		fi
+		for ip in $(printf '%s\n' "$v" | grep -oE "\b$RE_IP\b" | sort -u); do
+			if ! printf '%s' "$ip" | grep -qE "$ALLOWED_IP"; then
+				refuse "$f: routable address inside a placeholder: $(mask "$ip")
+         Use a documentation address such as 203.0.113.10 instead."
+			fi
+		done
+	done
+done
+
+if [ "$refused" -ne 0 ]; then
+	cat >&2 <<-'EOF'
+
+Nothing was committed. Move the value into a *.local.json copy (git-ignored),
+or replace it with an obviously fake example value. See AGENTS.md.
+EOF
+	exit 1
+fi
+
+exit 0
