@@ -2,6 +2,17 @@
 
 Entry point for the project documentation.
 
+## Where things live
+
+The repository has two layers, and each keeps its documentation beside it:
+
+| Layer | Documentation |
+|-------|---------------|
+| `schemes/` — *what you run* | [Transport Schemes](../schemes/README.md) compares them and links each scheme's own page. Mechanism, threat model, key generation and operational limits live with the scheme, in `schemes/<scheme>/README.md`. |
+| `host/` — *where it runs* | The client and server OS integration, documented below. Nothing here changes when you switch schemes. |
+
+The guides below are split by which host you are setting up.
+
 ## How-To Guides
 
 ### Client Setup

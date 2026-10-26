@@ -1,6 +1,9 @@
 # Architecture
 
-The system provides an uncompromising, end-to-end proxy architecture connecting a transparently proxied Linux client to a hardened server through pluggable, censorship-resilient transport schemes.
+The system is two layers: a **datapath layer** that does not care which
+transport is in use, and a **scheme layer** that is nothing but the transport.
+Keeping them disjoint is what lets a scheme be swapped without touching the
+kernel-side machinery, and lets the datapath be reasoned about once.
 
 ---
 
@@ -11,7 +14,7 @@ The system provides an uncompromising, end-to-end proxy architecture connecting 
         |
         v
 +-----------------------------------------------------------------------------+
-| CLIENT TIER (Workstation / Gateway Datapath)                                |
+| CLIENT HOST — workstation / gateway datapath (scheme-independent)           |
 | 1. nftables: Marks external TCP/UDP packets with fwmark=1 (bypasses mark 2) |
 | 2. Policy Routing: fwmark=1 -> Table 110 -> local delivery to loopback     |
 | 3. Xray TProxy (:12345): Recovers original destination IP (IP_TRANSPARENT)   |
@@ -24,7 +27,7 @@ The system provides an uncompromising, end-to-end proxy architecture connecting 
                                       |
                                       v
 +-----------------------------------------------------------------------------+
-| SERVER TIER (VPS Egress Datapath)                                           |
+| SERVER HOST — VPS egress datapath (scheme-independent)                      |
 | 1. nftables: Stateful baseline firewall (drops invalid, admits 22/80/443)   |
 | 2. Kernel Tuning: BBR congestion control, TCP Fast Open, 64MB buffers       |
 | 3. Xray Server (:443): Terminates outer TLS/REALITY, authenticates VLESS    |
@@ -35,14 +38,17 @@ The system provides an uncompromising, end-to-end proxy architecture connecting 
 
 ---
 
-## 2. Pluggable Transport Schemes Architecture
+## 2. Layer Boundary: Scheme versus Datapath
 
 The transport tunnel between client and server is decoupled from the underlying operating system datapaths:
 - **Client Datapath Invariant**: The client's kernel Netfilter rules, routing policy table 110, Smart DNS split, and local application interceptions remain identical regardless of which transport scheme is selected.
 - **Server Datapath Invariant**: The server's kernel BBR tuning, firewall rules, and systemd service sandboxing remain identical across schemes.
-- **Scheme Pluggability**: A scheme directory in `schemes/` pairs a complete client config (`client.json`) with a complete server config (`server.json`); switching schemes means deploying the other directory's configs and touching nothing else:
-  - **Scheme 1 (`vless-xtls-vision-reality`)**: Borrows third-party TLS identities; zero domain requirement; deflecting active scanners directly to the destination target.
-  - **Scheme 2 (`vless-xtls-vision-tls`)**: Uses self-owned domain and authentic CA certificates; deflecting active probes to a local disguise website (Nginx/Caddy) via the PROXY protocol.
+- **Scheme Pluggability**: A scheme directory in `schemes/` pairs a complete
+  client config (`client.json`) with a complete server config (`server.json`),
+  so switching schemes means deploying the other directory's pair and touching
+  nothing else. What each scheme does with an unauthenticated connection, and
+  how they differ, is described in
+  [Transport Schemes](../../schemes/README.md).
 
 ---
 

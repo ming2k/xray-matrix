@@ -6,12 +6,23 @@ A production-grade, end-to-end proxy architecture for modern Linux workstations,
 
 ## What It Is
 
-This repository provides an integrated, dual-tier solution:
-1. **Client Tier**: A robust transparent proxy (TProxy) for Linux workstations and routers using Xray, nftables, and policy routing. Application traffic routes transparently with zero per-application configuration.
-2. **Server Tier**: A hardened, production-grade egress node on a Linux VPS featuring unprivileged systemd sandboxing, stateful nftables firewalls, modern BBR kernel tuning, and automated Web Fallback.
-3. **Pluggable Schemes Matrix**: Fully decoupled, ready-to-deploy transport schemes:
-   - **VLESS + TCP + XTLS-Vision + REALITY**: Zero domain required, borrows high-reputation foreign TLS identities, deflecting active scanners directly to the destination target.
-   - **VLESS + TCP + XTLS-Vision + TLS (Web Fallback)**: Uses self-owned domains and authentic CA certificates, deflecting active probes to an authentic local disguise website (Nginx/Caddy) via the PROXY protocol.
+Two layers, and they never overlap:
+
+1. **`schemes/` — what you run.** Ready-to-deploy transport schemes. Each
+   directory carries the complete Xray configuration for *both* ends plus its
+   own documentation, and picking one is copying a file:
+   - **VLESS + TCP + XTLS-Vision + REALITY**: zero domain required. The server
+     borrows the TLS identity of a high-reputation foreign site and deflects
+     active scanners to that real site.
+   - **VLESS + TCP + XTLS-Vision + TLS (Web Fallback)**: a domain you own with
+     an authentic CA certificate, deflecting active probes to a real local
+     website (Nginx/Caddy) via the PROXY protocol.
+2. **`host/` — where it runs.** The OS integration, identical whichever scheme
+   you pick. `host/client/` is a transparent proxy (TProxy) for Linux
+   workstations and routers: Xray, nftables and policy routing, with zero
+   per-application configuration. `host/server/` is a hardened egress node on a
+   Linux VPS: unprivileged systemd sandboxing, a stateful nftables firewall,
+   BBR kernel tuning, and the web-fallback infrastructure the TLS scheme uses.
 
 ### Core Architectural Guarantees
 - **Real-IP Smart DNS Split**: DNS resolves via DoH; applications receive authentic, unpolluted IP addresses without FakeIP subnet anomalies or DNS pollution.
