@@ -26,6 +26,7 @@ Entry point for the project documentation.
 | [Data Packet Lifecycle](explanation/packet-lifecycle.md) | Round-trip packet journey and 3-tier traffic steering model |
 | [DNS](explanation/dns.md) | System DNS vs. Xray DNS, and why port 53 stays direct |
 | [Captive Portals](explanation/captive-portals.md) | Why portals break under TProxy and how the design avoids it |
+| [Policy Decisions](explanation/policy-decisions.md) | QUIC, torrents, IPv6, DNS filtering and BBR: what is a choice, and its cost |
 
 ## Contributor
 

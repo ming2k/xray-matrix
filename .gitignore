@@ -1,9 +1,11 @@
 # Diagnostic reports
 xray-tproxy-diagnose-*.txt
 
-# Local client configs with real credentials — never commit
-xray-config/client/config-*.json
-!xray-config/client/config-example.json
+# Local per-server configs with real credentials — never commit.
+# Both roles follow the same rule: config-example.json is the template,
+# every other config-*.json is a local copy.
+xray-config/*/config-*.json
+!xray-config/*/config-example.json
 
 # macOS
 .DS_Store

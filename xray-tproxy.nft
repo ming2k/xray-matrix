@@ -2,12 +2,18 @@
 
 # Reserved IPv4 address ranges
 define RESERVED_IP = {
+  0.0.0.0/8,
   10.0.0.0/8,
   100.64.0.0/10,
   127.0.0.0/8,
   169.254.0.0/16,
   172.16.0.0/12,
   192.0.0.0/24,
+  192.0.2.0/24,
+  192.88.99.0/24,
+  198.18.0.0/15,
+  198.51.100.0/24,
+  203.0.113.0/24,
   224.0.0.0/4,
   240.0.0.0/4,
   255.255.255.255/32
@@ -18,7 +24,9 @@ define RESERVED_IP6 = {
   ::1/128,
   fc00::/7,
   fe80::/10,
-  ff00::/8
+  ff00::/8,
+  ::ffff:0:0/96,
+  2001:db8::/32
 }
 
 # Basic constants
@@ -36,6 +44,10 @@ table ip xray_v4 {
 
     # Bypass ICMP (ping, traceroute ICMP mode, etc.)
     ip protocol icmp return
+
+    # Bypass DHCP replies: a lease can be unicast to an address the host
+    # does not own yet, so the reserved checks below miss it.
+    udp sport 67 udp dport 68 return
 
     # Unmarked port-53 packets to the resolver stub (127.0.0.53) are
     # Xray's own `localhost` DNS queries, exempted in the output chain.
@@ -70,6 +82,9 @@ table ip xray_v4 {
 
     # Bypass ICMP from local machine
     ip protocol icmp return
+
+    # Bypass DHCP client traffic (unicast lease renewal to the server).
+    udp dport 67 return
 
     # Exempt the DNS sockets of the Xray user and systemd-resolved from
     # DNS interception, or the localhost DNS path loops forever:
@@ -132,9 +147,6 @@ table ip6 xray_v6 {
     # Skip reserved IPv6 ranges
     ip6 daddr $RESERVED_IP6 return
 
-    # LAN destinations stay direct
-    ip6 daddr fc00::/7 return
-
     # Redirect all remaining TCP/UDP traffic to Xray TProxy
     ip6 nexthdr tcp tproxy to [::1]:$XRAY_TPROXY_PORT meta mark set $XRAY_MARK counter
     ip6 nexthdr udp tproxy to [::1]:$XRAY_TPROXY_PORT meta mark set $XRAY_MARK counter
@@ -178,9 +190,6 @@ table ip6 xray_v6 {
 
     # Skip reserved IPv6 ranges
     ip6 daddr $RESERVED_IP6 return
-
-    # LAN destinations stay direct
-    ip6 daddr fc00::/7 return
 
     # Mark remaining TCP/UDP packets for routing through Xray
     ip6 nexthdr tcp meta mark set $XRAY_MARK counter

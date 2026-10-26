@@ -1,14 +1,44 @@
 # How to Verify the Setup
 
-Confirm that interception, policy routing, and Xray forwarding all work
-after installation or after changing the nftables rules.
+Run after installing, and after any change to the ruleset or the client
+config.
+
+## The Datapath, End To End
+
+The static checks below prove the rules are installed; these prove traffic
+is still being *split*. Stop at the first failure.
+
+```sh
+# 1. domestic and overseas DNS both answer (system resolver -> Xray DNS)
+getent ahostsv4 www.baidu.com
+getent ahostsv4 www.gstatic.com
+
+# 2. direct path
+curl -s -o /dev/null -w '%{http_code}\n' -m 8 https://www.baidu.com/     # 200
+
+# 3. proxied path: an overseas destination answers through the tunnel
+curl -s -m 10 https://www.gstatic.com/generate_204 -o /dev/null -w '%{http_code}\n'   # 204
+
+# 4. which outbound actually carried the traffic (needs the api inbound)
+xray api statsquery --server=127.0.0.1:10085 -pattern 'outbound>>>' | \
+  jq -r '.stat[] | "\(.name)\t\(.value)"'
+
+# 5. the kernel is still intercepting, not just the process running
+sudo nft -j list table ip xray_v4 | \
+  jq '[.. | objects | select(has("counter")) | .counter.packets] | add'
+```
+
+Step 4 separates "worked" from "worked through the wrong path":
+`outbound>>>direct>>>traffic>>>uplink` must grow for domestic traffic and
+`outbound>>><proxy tag>>>>traffic>>>uplink` for overseas traffic. Add
+`-reset` to zero the counters.
 
 ## Check the Static State
 
 ```sh
 systemctl status xray-tproxy.service
-ip rule show                     # expect: fwmark 0x1 lookup 110
-ip -6 rule show                  # expect: fwmark 0x1 lookup 110
+ip rule show                     # expect: fwmark 0x1 lookup 110 (or "lookup xray")
+ip -6 rule show                  # expect: the same
 ip route show table 110          # expect: local default dev lo
 sudo nft list tables             # expect: ip xray_v4 and ip6 xray_v6
 ```

@@ -14,7 +14,10 @@ local resolver such as `systemd-resolved`:
 - **Full TProxy Protection**: Both HTTP (port 80) and HTTPS (port 443) for overseas destinations travel through the proxy tunnel, protecting against ISP hijacking and GFW blocks
 - **Captive Portal Compatible**: Portal probes dynamically resolve via local DHCP DNS and route direct for automatic Wi-Fi login popups
 - **Root Process Proxying**: `sudo apt update`, `docker pull`, and admin processes are transparently proxied according to Xray routing rules
-- **Resilient Policy Routing**: The fwmark policy rule natively survives sleep/wake and interface switching because `systemd-networkd` owns it
+- **Resilient Policy Routing**: `systemd-networkd` owns the fwmark policy rule, so it survives sleep/wake and interface switching; the unit repairs it and logs when it is gone
+- **Fail-Closed Restarts**: a crash keeps the tables and the policy route, so the restart window drops traffic instead of leaking it
+- **Observable**: per-outbound byte counters on a loopback gRPC API
+- **Validated on Start**: the unit refuses a config that fails `xray run -test` and asserts the datapath after start
 
 
 ## Quick Start
@@ -22,29 +25,36 @@ local resolver such as `systemd-resolved`:
 Run from the repository root:
 
 ```sh
-# prepare
-sudo useradd --system --no-create-home --shell /usr/bin/nologin xray
+# 1. the solution: unit, ruleset, service account, networkd template
+#    (upstream xray and the geo data come in as dependencies)
+sudo install -Dm644 ./xray-tproxy.service /var/lib/wright/plans/xray-tproxy/
+sudo install -Dm644 ./xray-tproxy.nft /var/lib/wright/plans/xray-tproxy/
+sudo install -Dm644 ./xray-tproxy.sysusers.conf /var/lib/wright/plans/xray-tproxy/
+sudo install -Dm644 ./xray-policy.conf /var/lib/wright/plans/xray-tproxy/
+sudo wright install xray-tproxy
 
-# core files
-sudo install -Dm644 ./xray-tproxy.nft /etc/nftables/xray-tproxy.nft
-sudo install -Dm644 ./xray-tproxy.service /etc/systemd/system/xray-tproxy.service
-sudo install -Dm644 ./xray-tproxy.service.d/geo-assets.conf /etc/systemd/system/xray-tproxy.service.d/geo-assets.conf
-sudo install -d /etc/systemd/network/20-wireless.network.d
-sudo install -m644 ./xray-policy.conf /etc/systemd/network/20-wireless.network.d/xray-policy.conf
-sudo install -d /etc/xray
-sudo cp ./xray-config/client/config-example.json /etc/xray/config.json
-sudoedit /etc/xray/config.json          # fill in every <PLACEHOLDER:...>
+# 2. operator-owned configuration: only what differs per host
+cp ./xray-config/client/config-example.json ./xray-config/client/config-jp.json
+$EDITOR ./xray-config/client/config-jp.json      # fill in every <PLACEHOLDER:...>
+sudo install -Dm600 ./xray-config/client/config-jp.json /etc/xray/config.json
+sudo install -Dm644 /usr/share/xray-tproxy/xray-policy.conf \
+  /etc/systemd/network/<uplink>.network.d/xray-policy.conf
 
-# enable services
-sudo systemctl reload systemd-networkd && sudo networkctl reconfigure wlan0
+# 3. validate, then start
+sudo xray run -test -config /etc/xray/config.json    # must print: Configuration OK
+sudo networkctl reconfigure <uplink>
 sudo systemctl daemon-reload
 sudo systemctl enable --now xray-tproxy.service
 ```
 
+Replace `<uplink>` with the `.network` file that manages your connection
+(such as `20-wireless.network`); every uplink profile you use needs the
+policy drop-in. Step 2 holds the only host-specific values (credentials and
+the uplink name) — see
+[How to Install and Start the Transparent Proxy](docs/how-to/install-and-start.md)
+for prerequisites and per-step explanations.
 
-Adjust the `.network.d/` path to the `.network` file that manages your
-uplink. For prerequisites, per-step explanations, and optional parts, see
-[How to Install and Start the Transparent Proxy](docs/how-to/install-and-start.md).
+
 
 ## Documentation
 
