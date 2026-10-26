@@ -14,7 +14,7 @@ traffic).
 | `BYPASS_MARK` | `2` | fwmark that skips interception; Xray outbounds set it via `sockopt.mark` |
 | `XRAY_TPROXY_PORT` | `12345` | Xray `dokodemo-door` inbound port |
 | routing table | `110` | Contains `local default dev lo` for mark-1 packets |
-| policy rule | `32765` | `from all fwmark 0x1 lookup 110`, owned by the systemd-networkd drop-in `xray-policy.conf`; the unit repairs it if missing |
+| policy rule | `32765` | `from all fwmark 0x1 lookup 110`, managed directly by `xray-tproxy.service` |
 
 ## Intercepted and Bypassed Rule Order
 
@@ -60,7 +60,7 @@ sudo nft -j list table ip xray_v4 | \
 
 The tables are not part of `/etc/nftables.conf`: the unit recreates them on
 every start and removes them on an explicit stop, so a `flush ruleset`
-cannot leave a half-broken state. The `fwmark 1 -> table 110` policy rule is
-owned elsewhere — by the networkd drop-in `xray-policy.conf`, one per uplink
-profile. See [Architecture](../explanation/architecture.md#4-component-ownership).
+cannot leave a half-broken state. The `fwmark 1 -> table 110` policy rule and
+table 110 routes are managed directly by `xray-tproxy.service`. See
+[Architecture](../explanation/architecture.md#4-component-ownership).
 

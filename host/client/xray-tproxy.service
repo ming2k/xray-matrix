@@ -3,70 +3,72 @@ Description=Xray Transparent Proxy
 Documentation=https://github.com/XTLS/Xray-core
 After=network-online.target nss-lookup.target nftables.service
 Wants=network-online.target nftables.service
-# Keep restarting: each start re-asserts the datapath.
 StartLimitIntervalSec=0
 
 [Service]
 Type=simple
 User=xray
 WorkingDirectory=/etc/xray
-# Directory holding geoip.dat / geosite.dat.
 Environment=XRAY_LOCATION_ASSET=/usr/share/v2ray-rules-dat
 CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_BIND_SERVICE CAP_NET_RAW
 AmbientCapabilities=CAP_NET_ADMIN CAP_NET_BIND_SERVICE CAP_NET_RAW
 NoNewPrivileges=true
 
-# The policy rule belongs to systemd-networkd (xray-policy.conf, one per
-# uplink); the route in table 110 and both nftables tables belong here.
-# The rule is repaired, never removed: an uplink without the drop-in would
-# otherwise run unprotected while the unit reports healthy.
-ExecStartPre=+/bin/bash -c 'ip route show table 110 | grep -q "local default" || ip route add local 0.0.0.0/0 dev lo table 110'
-ExecStartPre=+/bin/bash -c 'ip -6 route show table 110 | grep -q "local default" || ip -6 route add local ::/0 dev lo table 110'
-ExecStartPre=+/bin/bash -c 'ip rule show | grep -q "fwmark 0x1 lookup" || { echo "xray-tproxy: policy rule missing, add xray-policy.conf to this uplink profile" >&2; ip rule add fwmark 0x1 table 110 proto static; }'
-ExecStartPre=+/bin/bash -c 'ip -6 rule show | grep -q "fwmark 0x1 lookup" || { echo "xray-tproxy: IPv6 policy rule missing, add xray-policy.conf to this uplink profile" >&2; ip -6 rule add fwmark 0x1 table 110 proto static; }'
-ExecStartPre=+-/usr/sbin/nft delete table ip xray_v4
-ExecStartPre=+-/usr/sbin/nft delete table ip6 xray_v6
-ExecStartPre=+/usr/sbin/nft -f /etc/nftables/xray-tproxy.nft
+# 1. Network setup: configure table 110 routes, policy routing rules, and load nftables
+ExecStartPre=+/bin/bash -c '\
+    ip route replace local default dev lo table 110; \
+    ip -6 route replace local default dev lo table 110; \
+    while ip rule del fwmark 0x1 table 110 2>/dev/null; do :; done; \
+    while ip -6 rule del fwmark 0x1 table 110 2>/dev/null; do :; done; \
+    ip rule add fwmark 0x1 table 110 priority 32765; \
+    ip -6 rule add fwmark 0x1 table 110 priority 32765; \
+    nft -f /etc/nftables/xray-tproxy.nft; \
+'
 
-# LogsDirectory= owns the directory, not the files inside it. Every root-run
-# xray re-creates them as root:root 0600 — a manual `sudo xray run`, and this
-# unit's own preflight before it dropped the `+` — after which the unprivileged
-# main process dies with `open /var/log/xray/access.log: permission denied`
-# (status=23). Re-assert ownership here so that state cannot outlive a restart.
-ExecStartPre=+/bin/bash -c 'install -d -m 0755 -o xray -g xray /var/log/xray; touch /var/log/xray/access.log /var/log/xray/error.log; chown xray:xray /var/log/xray/access.log /var/log/xray/error.log; chmod 0640 /var/log/xray/access.log /var/log/xray/error.log'
+# 2. Re-assert log directory and file ownership
+ExecStartPre=+/bin/bash -c '\
+    install -d -m 0755 -o xray -g xray /var/log/xray; \
+    touch /var/log/xray/access.log /var/log/xray/error.log; \
+    chown xray:xray /var/log/xray/access.log /var/log/xray/error.log; \
+    chmod 0640 /var/log/xray/access.log /var/log/xray/error.log; \
+'
 
-# Refuse to start on a config that does not load; a bad config must not
-# replace a working process with one running a half-empty ruleset.
-#
-# Deliberately without `+`: the preflight must run with the same identity as
-# the main process. As root it reads a config the service user cannot read and
-# writes the logs as root, so a permission problem passes the preflight and
-# only resurfaces as status=23 in ExecStart.
+# 3. Configuration preflight check (runs as User=xray, no +)
 ExecStartPre=/usr/bin/xray run -test -config /etc/xray/config.json
 
+# Main daemon process
 ExecStart=/usr/bin/xray run -config /etc/xray/config.json
 
-# Assert the datapath, not just the process.
-#
-# The kernel state is asserted once, but the listener is polled: Type=simple
-# runs ExecStartPost as soon as the process is forked, while Xray still has to
-# load geoip.dat/geosite.dat (tens of megabytes) before it binds 12345. A
-# single check therefore races the start and turns a healthy service into a
-# restart loop on any host where that load exceeds the fork-to-check gap.
-ExecStartPost=+/bin/bash -c 'ip rule show | grep -q "fwmark 0x1 lookup" || { echo "xray-tproxy: policy rule missing after start" >&2; exit 1; }; nft list table ip xray_v4 >/dev/null 2>&1 || { echo "xray-tproxy: table ip xray_v4 missing" >&2; exit 1; }; nft list table ip6 xray_v6 >/dev/null 2>&1 || { echo "xray-tproxy: table ip6 xray_v6 missing" >&2; exit 1; }; for ((i = 0; i < 200; i++)); do ss -lnH "sport = :12345" 2>/dev/null | grep -q . && exit 0; sleep 0.05; done; echo "xray-tproxy: no TProxy listener on 12345 after 10s" >&2; exit 1'
+# 4. Startup verification: poll until TProxy listener binds port 12345
+ExecStartPost=+/bin/bash -c '\
+    for ((i = 0; i < 200; i++)); do \
+        ss -lnH "sport = :12345" 2>/dev/null | grep -q . && exit 0; \
+        sleep 0.05; \
+    done; \
+    echo "xray-tproxy: no TProxy listener on 12345 after 10s" >&2; \
+    exit 1; \
+'
 
 Restart=always
 RestartSec=2
 
-# Explicit stop removes the datapath; a crash keeps it, so the restart
-# window fails closed instead of leaking unproxied traffic.
-ExecStopPost=+/bin/bash -c 'if [ "${SERVICE_RESULT:-unknown}" = success ]; then ip route flush table 110 2>/dev/null; ip -6 route flush table 110 2>/dev/null; nft delete table ip xray_v4 2>/dev/null; nft delete table ip6 xray_v6 2>/dev/null; else echo "xray-tproxy: unit failed (${SERVICE_RESULT}), keeping the datapath so traffic fails closed" >&2; fi'
+# 5. Network restoration: stop traffic interception immediately, then clean up routes and rules
+ExecStop=+/bin/bash -c '\
+    nft delete table ip xray_v4 2>/dev/null || true; \
+    nft delete table ip6 xray_v6 2>/dev/null || true; \
+'
+ExecStopPost=+/bin/bash -c '\
+    nft delete table ip xray_v4 2>/dev/null || true; \
+    nft delete table ip6 xray_v6 2>/dev/null || true; \
+    ip route flush table 110 2>/dev/null || true; \
+    ip -6 route flush table 110 2>/dev/null || true; \
+    while ip rule del fwmark 0x1 table 110 2>/dev/null; do :; done; \
+    while ip -6 rule del fwmark 0x1 table 110 2>/dev/null; do :; done; \
+'
 
 LogsDirectory=xray
 StateDirectory=xray
 
-# Go needs no writable system paths and no W+X memory. Commands that touch
-# kernel state carry `+`, which bypasses these restrictions.
 ProtectSystem=strict
 ProtectHome=true
 PrivateTmp=true

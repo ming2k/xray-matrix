@@ -26,14 +26,13 @@ If routing tables and firewall rules are torn down while the network interface i
 3. **Fail-Closed Persistent Kernel State**: Keep kernel routing table 110 and nftables tables active across service crashes and restarts.
 
 ## Decision Outcome
-Chosen option: **Option 3: Fail-Closed Persistent Kernel State**.
+Chosen option: **Option 3: Fail-Closed Persistent Kernel State across Restarts with Clean Teardown on Stop**.
 
-- **Independent Policy Rule**: The `ip rule add fwmark 1 lookup 110` is owned by `systemd-networkd` (`host/client/xray-policy.conf`) and persists regardless of unit state.
-- **Service Verification**: The client unit (`xray-tproxy.service`) audits and re-applies the policy rule and table 110 route during `ExecStartPre`, but does NOT flush them on shutdown.
-- **Fail-Closed Behavior**: When Xray is dead, packets marked with `mark 1` still hit table 110 and loopback. Since no socket listens on port 12345, the kernel sends TCP RST / ICMP destination unreachable, completely dropping traffic and preventing unencrypted egress leaks.
+- **Fail-Closed across Restarts**: During daemon failure, crashes, or service restarts, systemd automatically schedules a restart (`Restart=always`) without running `ExecStopPost`. Packets marked with `mark 1` continue hitting table 110 and loopback. Since no socket listens on port 12345, the kernel sends TCP RST / ICMP destination unreachable, completely dropping traffic and preventing unencrypted egress leaks.
+- **Clean Teardown on Stop**: When the operator stops the service (`systemctl stop`), `ExecStopPost` flushes table 110, removes the `fwmark 0x1` policy rules, and deletes the nftables tables (`xray_v4`, `xray_v6`), cleanly restoring the network state to direct networking.
 
 ### Ratified Invariants
 - `[INV-FAIL-CLOSED]`: In the event of daemon failure, intercepted traffic must be dropped by the kernel rather than leaking in plaintext over the physical uplink.
 
 ## Negative Knowledge & Discarded Alternatives
-- **Why not flush rules on stop?** Flushing firewall rules on service exit or restart introduces a dangerous race condition window where background applications (sync daemons, browsers, messaging clients) establish direct, unencrypted connections before the proxy recovers.
+- **Why not flush rules on restart?** Flushing firewall rules during a crash-restart cycle introduces a dangerous race condition window where background applications (sync daemons, browsers, messaging clients) establish direct, unencrypted connections before the proxy recovers. On intentional stop, however, full teardown is necessary to return the host to direct connectivity.

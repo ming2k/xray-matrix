@@ -47,10 +47,9 @@ Two layers, and they never overlap:
 ├── host/                           # Where it runs: OS artifacts, identical for every scheme
 │   ├── client/                     #   Generic Linux TProxy (workstation / gateway)
 │   │   ├── README.md               #   TProxy datapath architecture & Xray configuration contract
-│   │   ├── xray-tproxy.service
+│   │   ├── xray-tproxy.service     #   Lifecycle unit (setup, verify, auto-restart, clean teardown)
 │   │   ├── xray-tproxy.sysusers.conf
-│   │   ├── xray-tproxy.nft
-│   │   └── xray-policy.conf
+│   │   └── xray-tproxy.nft         #   Netfilter TProxy ruleset (self-cleaning tables)
 │   └── server/                     #   VPS egress node
 │       ├── xray-server.service
 │       ├── xray-server.sysusers.conf
@@ -111,19 +110,15 @@ $EDITOR $SCHEME/client.local.json            # fill in every <PLACEHOLDER:...>
 xray run -test -config $SCHEME/client.local.json
 sudo install -Dm600 $SCHEME/client.local.json /etc/xray/config.json
 
-# 3. Policy-routing drop-in, one per uplink profile (<uplink> = e.g. 20-wireless)
-sudo install -Dm644 ./host/client/xray-policy.conf \
-  /etc/systemd/network/<uplink>.network.d/xray-policy.conf
-
-# 4. Start
-sudo networkctl reconfigure <uplink> && sudo systemctl daemon-reload
+# 3. Start
+sudo systemctl daemon-reload
 sudo systemctl enable --now xray-tproxy.service
 ```
 
 `$SCHEME/client.local.json` is git-ignored: that is where the credentials live.
-Step 3 is easy to miss and fails silently — a profile without the drop-in has
-no policy rule, so traffic goes direct while the service looks healthy. The
-unit repairs the rule if it is missing, and logs that it had to.
+The service unit directly manages the TProxy datapath (table 110 routes, policy
+routing rules, and nftables tables). When stopped (`sudo systemctl stop xray-tproxy`),
+it cleanly removes all tables, routes, and rules, restoring direct networking.
 
 ### On the server (VPS egress node)
 

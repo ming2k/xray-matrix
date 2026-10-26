@@ -10,7 +10,7 @@
 - **Two-Layer Anti-Overlap**: `schemes/` (what you run) and `host/` (where it runs) are strictly decoupled. Switching or adding transports touches only `schemes/<scheme>/` and leaves `host/` completely untouched (ADR-0001).
 - **Scheme Datapath Isomorphism**: The shared datapath (`inbounds`, `dns`, `routing`, `policy`) must remain strictly identical across all scheme templates in `schemes/*` (`[INV-SCHEME-ISOMORPHISM]`).
 - **Fail-Closed Datapath**: On daemon restart or crash, kernel tables and policy routes must remain intact (`[INV-FAIL-CLOSED]`). The service fails closed rather than leaking unencrypted traffic (ADR-0004).
-- **Single-Owner Kernel Objects**: The policy rule (`fwmark 1 -> table 110`) belongs to the networkd drop-in; table `110` and nftables belong to `xray-tproxy.service`.
+- **Single-Owner Kernel Objects**: The policy rule (`fwmark 1 -> table 110`), routing table `110`, and nftables tables belong exclusively to `xray-tproxy.service`. On stop, all three are cleanly removed.
 - **Local API Loopback Purity**: The administrative API (`127.0.0.1:10085`) must strictly listen on loopback, and its routing rule must remain the very first rule in `routing.rules` (`[INV-LOCAL-API-LOOPBACK]`).
 
 ## 3. Engineering Discipline

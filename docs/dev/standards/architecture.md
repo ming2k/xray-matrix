@@ -21,10 +21,9 @@ The repository is structured into two fundamental layers that never overlap:
 │  Layer 2: Host OS Integrations (`host/`) — Where It Runs               │
 │  - Generic Linux system-level artifacts, identical across all schemes. │
 │  - `host/client/`: Transparent Proxy (TProxy) on Linux workstations:   │
-│    ├── `xray-tproxy.service` (Fail-closed lifecycle, ExecStartPre)     │
-│    ├── `xray-tproxy.nft`     (nftables tables: xray_v4, xray_v6)       │
-│    ├── `xray-tproxy.sysusers.conf` (Unprivileged user allocation)      │
-│    └── `xray-policy.conf`    (systemd-networkd table 110 drop-in)      │
+│    ├── `xray-tproxy.service` (Self-contained lifecycle, setup & clean teardown) │
+│    ├── `xray-tproxy.nft`     (Self-cleaning nftables tables: xray_v4, xray_v6)   │
+│    └── `xray-tproxy.sysusers.conf` (Unprivileged user allocation)      │
 │  - `host/server/`: VPS egress node hardening:                          │
 │    ├── `xray-server.service` (Sandboxed systemd unit)                  │
 │    ├── `xray-server.nft`     (Minimal stateful ingress firewall)       │
@@ -49,9 +48,8 @@ The repository is structured into two fundamental layers that never overlap:
 
 ### 2.3 Single-Owner Kernel Object Rule
 - **Red-Line**: Every Linux kernel object (nftables table, policy routing rule, routing table entry) must have exactly one authoritative owner.
-- The `fwmark 1 -> table 110` policy routing rule belongs exclusively to `systemd-networkd` via `xray-policy.conf`.
-- The `local default dev lo table 110` route and the nftables tables (`xray_v4`, `xray_v6`) belong exclusively to `xray-tproxy.service`.
-- The service unit may audit and repair missing networkd rules, but must NEVER delete them on shutdown (`RemainAfterExit=no`).
+- The `fwmark 1 -> table 110` policy routing rule, the `local default dev lo table 110` route, and the nftables tables (`xray_v4`, `xray_v6`) belong exclusively to `xray-tproxy.service`.
+- The service unit asserts and ensures the rules and routes on start, and cleanly tears them down on stop (`RemainAfterExit=no`) to restore direct networking without relying on external network managers.
 
 ### 2.4 Local API Isolation
 - **Red-Line**: The Xray Local API inbound (`127.0.0.1:10085`) is an administrative attack surface.

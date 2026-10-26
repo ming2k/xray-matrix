@@ -37,26 +37,25 @@ The split is by whether a value differs per host:
 | Artifact | Layer | Installed by / to |
 |---|---|---|
 | `xray` (the binary) | upstream, unmodified | `wright install xray` |
-| `host/client/xray-tproxy.service`, `host/client/xray-tproxy.nft`, `host/client/xray-tproxy.sysusers.conf`, `host/client/xray-policy.conf` (template) | solution | `wright install xray-tproxy` → unit, `/etc/nftables/xray-tproxy.nft`, `/usr/lib/sysusers.d/xray.conf`, `/usr/share/xray-tproxy/xray-policy.conf` |
+| `host/client/xray-tproxy.service`, `host/client/xray-tproxy.nft`, `host/client/xray-tproxy.sysusers.conf` | solution | `wright install xray-tproxy` → unit, `/etc/nftables/xray-tproxy.nft`, `/usr/lib/sysusers.d/xray.conf` |
 | `schemes/<scheme>/client.json` | operator | `/etc/xray/config.json`, mode `600` — holds the user ID and the scheme key |
-| `host/client/xray-policy.conf` copied into an uplink profile | operator | `/etc/systemd/network/<uplink>.network.d/` — the profile name is host-specific |
 
 ## Install the OS Layer
 
-The Quick Start installs the four `host/client/` files straight to their system
+The Quick Start installs the three `host/client/` files straight to their system
 destinations. The alternative is the `wright` packaging, which performs the
 same placement and pulls the upstream dependencies in with it:
 
 ```sh
 sudo install -Dm644 ./host/client/xray-tproxy.service        /var/lib/wright/plans/xray-tproxy/xray-tproxy.service
 sudo install -Dm644 ./host/client/xray-tproxy.nft            /var/lib/wright/plans/xray-tproxy/xray-tproxy.nft
-sudo install -Dm644 ./host/client/xray-policy.conf           /var/lib/wright/plans/xray-tproxy/xray-policy.conf
 sudo install -Dm644 ./host/client/xray-tproxy.sysusers.conf  /var/lib/wright/plans/xray-tproxy/xray-tproxy.sysusers.conf
 sudo wright install xray-tproxy          # pulls xray and v2ray-rules-dat in
 ```
 
-Either route leaves the same state: `/usr/bin/xray`, the unit, the `xray`
-service account via sysusers, and the networkd template.
+Either route leaves the same state: `/usr/bin/xray`, the unit, and the `xray`
+service account via sysusers. The service unit directly manages table 110 routes,
+policy routing rules, and the nftables ruleset.
 
 One consequence of the second route is easy to miss: `wright` caches both the
 fetched source copy and the forge workspace, and neither is keyed on the
@@ -84,28 +83,11 @@ Two consequences of the unit owning the datapath, whichever route you take:
   copies set `User=root`, which breaks the `skuid "xray"` DNS-loop exemption
   in the ruleset. Remove the shadowing unit rather than editing it.
 
-## Install the Policy-Rule Drop-In
-
-The `fwmark 1 -> table 110` policy rule comes from the template the package
-installs at `/usr/share/xray-tproxy/xray-policy.conf`, copied into the
-`.network.d/` directory of **every** `.network` profile that manages an
-uplink — a profile without it silently bypasses proxying:
-
-```sh
-sudo install -Dm644 /usr/share/xray-tproxy/xray-policy.conf \
-  /etc/systemd/network/20-wireless.network.d/xray-policy.conf
-```
-
-Repeat for each profile (for example `10-eth.network`), then apply it:
-
-```sh
-sudo systemctl reload systemd-networkd
-sudo networkctl reconfigure wlan0   # replace with your uplink
-```
+## Name Routing Table 110 (Optional)
 
 Optionally name routing table `110` for readability. The alias is
 cosmetic: everything here uses the numeric id `110`, and the policy rule
-displays as `lookup xray` once the alias exists.
+displays as `lookup xray` once the alias exists:
 
 ```sh
 echo '110 xray' | sudo tee -a /etc/iproute2/rt_tables

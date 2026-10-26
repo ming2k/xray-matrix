@@ -20,9 +20,9 @@ DNS-loop exemption matches `meta skuid "xray"`, and the units name the user in
 
 | Kernel object | Owner | Lifecycle |
 |---------------|-------|-----------|
-| `table ip xray_v4`, `table ip6 xray_v6` | the client unit | Deleted and reloaded on every start; deleted only on an explicit stop |
-| `local default dev lo` route in table `110`, v4 and v6 | the client unit | Added on start if absent; flushed on an explicit stop |
-| `fwmark 0x1 lookup 110` policy rule, v4 and v6 | the `systemd-networkd` drop-in | One per uplink profile; the unit **repairs** it if missing and never removes it |
+| `table ip xray_v4`, `table ip6 xray_v6` | the client unit | Deleted and reloaded on start; deleted on stop |
+| `local default dev lo` route in table `110`, v4 and v6 | the client unit | Added on start if absent; flushed on stop |
+| `fwmark 0x1 lookup 110` policy rule, v4 and v6 | the client unit / networkd drop-in | Added on start if missing; removed on stop |
 | `/var/log/xray`, `/var/lib/xray` | the client unit (`LogsDirectory`, `StateDirectory`) | The directories are created and owned by systemd; the two log files are re-owned to `xray` on every start |
 
 The split is deliberate: `systemd-networkd` owns the rule because it is the
@@ -57,15 +57,15 @@ a root-run `xray` may have left inside it.
 
 ### Stop sequence
 
-`ExecStopPost` branches on `$SERVICE_RESULT`:
+When the service stops, `ExecStopPost` tears down all proxy networking state:
 
-| Result | Action |
-|--------|--------|
-| `success` (operator stop or restart) | Flush table 110, delete both tables — networking is direct again |
-| Anything else (crash, signal, timeout) | Keep the datapath installed |
+1. Deletes the `ip xray_v4` and `ip6 xray_v6` nftables tables.
+2. Flushes routing table `110` (both IPv4 and IPv6).
+3. Deletes the `fwmark 0x1 table 110` policy routing rules.
 
-Keeping the datapath on failure is the fail-closed choice: during the
-`RestartSec` window, traffic is dropped rather than leaking unproxied.
+This cleanly restores the pre-start network state so traffic falls back to normal direct networking.
+
+During daemon failure or crash, systemd's `Restart=always` immediately schedules a restart without running `ExecStopPost`, keeping the datapath armed during the `RestartSec` window so intercepted traffic fails closed rather than leaking unencrypted.
 
 ### Capabilities and sandbox
 

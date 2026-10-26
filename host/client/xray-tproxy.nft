@@ -34,6 +34,12 @@ define XRAY_MARK = 1
 define BYPASS_MARK = 2
 define XRAY_TPROXY_PORT = 12345
 
+# Ensure clean table state on load
+table ip xray_v4
+delete table ip xray_v4
+table ip6 xray_v6
+delete table ip6 xray_v6
+
 # IPv4 Rules for Xray TProxy
 table ip xray_v4 {
   chain prerouting {

@@ -14,8 +14,7 @@ not change when switching transport schemes (REALITY, TLS, etc.).
 | File | Target Location | Owner | Purpose |
 |------|-----------------|-------|---------|
 | `xray-tproxy.nft` | `/etc/nftables/xray-tproxy.nft` | `xray-tproxy.service` | nftables tables (`ip xray_v4`, `ip6 xray_v6`) for TProxy interception, bypass marks, and DNS loop protection |
-| `xray-tproxy.service` | `/etc/systemd/system/xray-tproxy.service` | `systemd` | Manages the Xray daemon lifecycle, table-110 routing, capabilities, and pre/post assertions |
-| `xray-policy.conf` | `/etc/systemd/network/<uplink>.network.d/` | `systemd-networkd` | Policy routing rule (`fwmark 0x1 lookup 110`) per uplink profile |
+| `xray-tproxy.service` | `/etc/systemd/system/xray-tproxy.service` | `systemd` | Manages the Xray daemon lifecycle, table 110 routes, policy routing rules, and clean network teardown |
 | `xray-tproxy.sysusers.conf` | `/usr/lib/sysusers.d/xray.conf` | `systemd-sysusers` | Declares the dedicated unprivileged `xray` system user and group |
 
 ---

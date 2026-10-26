@@ -50,10 +50,9 @@ ip route show table 110          # local default still present
 ip rule show                     # fwmark 0x1 lookup 110 missing?
 ```
 
-A missing `fwmark` rule with the other two intact is the signature of the
-networkd reconfiguration problem. The fix is the drop-in described in
-[How to Install and Start the Transparent Proxy](install-and-start.md#install-the-policy-rule-drop-in);
-background is in [Architecture](../explanation/architecture.md#suspend-and-resume-resiliency).
+If the `fwmark` rule was cleared by an external network manager, restarting
+the service (`sudo systemctl restart xray-tproxy`) will immediately reassert
+all tables, routes, and policy rules. See [How to Install and Start the Transparent Proxy](install-and-start.md).
 
 ## Silent Bypass
 
@@ -68,8 +67,7 @@ sudo nft -j list table ip xray_v4 | jq '[.. | objects | select(has("counter")) |
 xray api statsquery --server=127.0.0.1:10085 -pattern 'outbound>>>'   # direct vs proxy bytes
 ```
 
-In the order they occur: an uplink profile without
-`<profile>.network.d/xray-policy.conf`; `systemctl restart nftables` having
+In the order they occur: `systemctl restart nftables` having
 flushed the tables (restart the unit); a unit in `/etc/systemd/system/`
 shadowing the packaged one — older copies set `User=root`, which breaks the
 `skuid "xray"` DNS-loop exemption.

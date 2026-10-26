@@ -104,14 +104,6 @@ sudo install -Dm644 ./host/client/xray-tproxy.service /etc/systemd/system/
 sudo install -Dm644 ./host/client/xray-tproxy.nft /etc/nftables/xray-tproxy.nft
 sudo install -Dm644 ./host/client/xray-tproxy.sysusers.conf /usr/lib/sysusers.d/xray.conf
 sudo systemd-sysusers
-
-# 2. Attach policy routing to your physical network interface
-# Identify your active uplink (e.g., 20-wireless or 10-ethernet in /etc/systemd/network/)
-UPLINK="20-wireless"
-sudo install -Dm644 ./host/client/xray-policy.conf \
-  /etc/systemd/network/${UPLINK}.network.d/xray-policy.conf
-
-sudo networkctl reconfigure ${UPLINK}
 ```
 
 ### 2.2 Configure the Client Scheme

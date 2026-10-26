@@ -91,7 +91,7 @@ already done its part.
 | :--- | :--- | :--- |
 | Client nftables tables | the client unit | It loads them on every start, so a `flush ruleset` cannot leave a half-broken state |
 | Client table-110 routes | the client unit | Same lifecycle as the tables |
-| Client fwmark policy rule | the networkd uplink drop-in | networkd is the component that knows the uplink was reconfigured; the unit repairs the rule but never removes it |
+| Client fwmark policy rule | the client unit / networkd drop-in | Ensured on start; removed on stop so network state cleanly restores |
 | Both Xray daemons | their units, as the unprivileged `xray` user | Least privilege, and the account name is itself part of the ruleset's contract |
 | Server firewall | the server host's own nftables configuration | Independent of Xray's lifecycle |
 | Server kernel tuning | the server host's sysctl configuration | Applied at boot, not per service start |
@@ -109,9 +109,7 @@ this table are lookup material:
 On `systemd-networkd` client hosts, a suspend/resume cycle may reconfigure the uplink and drop foreign `ip rule` entries while leaving route tables intact. The client unit uses an uplink drop-in owned by networkd, so networkd automatically reapplies the rule upon reconfiguring the link.
 
 ### Fail-Closed Restarts
-On the client, `ExecStopPost` branches on `$SERVICE_RESULT`:
-- `success` (operator stop/restart): Tables and routes are removed, restoring direct networking.
-- Anything else (crash, signal, timeout): The datapath stays installed. The `Restart=always` window drops traffic rather than leaking unencrypted packets.
+On the client, daemon failures trigger systemd's automatic restart (`Restart=always`) without executing `ExecStopPost`, keeping the datapath armed during the `RestartSec` window so intercepted packets fail closed. When the service is stopped, `ExecStopPost` tears down the nftables tables, table 110 routes, and the fwmark policy rules, restoring direct networking.
 
 ### Privilege Sandboxing
 Both client and server run as the unprivileged `xray` user with strict systemd security boundaries (`ProtectHome`, `ProtectSystem=strict`, `NoNewPrivileges=true`, `PrivateDevices`, `MemoryDenyWriteExecute`).
