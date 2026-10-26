@@ -39,9 +39,19 @@ rules become active.
   removes it.
 - Do not commit diagnostic reports (`xray-tproxy-diagnose-*.txt`); they
   are covered by `.gitignore`.
-- Never commit `schemes/**/*.local.json` — those files carry real server
-  credentials and are covered by `.gitignore`. Rotate credentials
-  immediately if one is ever committed.
+- Never commit `**/*.local.json` — those files carry the server address, the
+  UUID and the REALITY key, and are covered by `.gitignore`. Rotate
+  credentials immediately if one is ever committed.
+- **Example values in a template must be obviously fake**: `REDACTED`,
+  `example`, `a1b2c3d4-…`, `203.0.113.x`. A template once shipped a real
+  REALITY private key inside a `<PRIVATE_KEY:…>` placeholder, and because git
+  history is permanent it is still there; the key was superseded, which is the
+  only reason it is not a live exposure. Treat every committed example value as
+  public, because it is.
+- The residual hole `.gitignore` cannot close: filling real values into
+  `schemes/<scheme>/client.json` itself. Ignore rules do not apply to tracked
+  files, so that config would be committed on the next `git add`. Keep host
+  values in the `.local.json` copy.
 - `host/client/xray-tproxy.nft` changes should keep the bypass semantics
   documented in `docs/reference/traffic-selection.md` in sync.
 - A scheme config is complete and self-contained, so a scheme directory may

@@ -1,10 +1,26 @@
-# Diagnostic reports
-xray-tproxy-diagnose-*.txt
+# --- Nothing host-specific is ever committed ---------------------------------
+#
+# Operator copies of a scheme config, holding the server address, the UUID and
+# the REALITY key. Copy schemes/<scheme>/client.json to client.local.json
+# beside it and fill that in.
+#
+# The suffix is the marker, at any depth, because a stray copy in host/ or at
+# the repository root is the same leak. Note what this rule cannot do: filling
+# in the *template* itself bypasses it entirely — .gitignore has no effect on
+# files git already tracks.
+*.local.json
 
-# Operator copies of a scheme config, carrying real credentials — never commit.
-# Copy schemes/<scheme>/client.json to client.local.json beside it; the suffix
-# is the only marker of "host-specific, not a template".
-schemes/*/*.local.json
+# Certificate and private-key material. Certificates live in /etc/letsencrypt
+# on the server (see schemes/vless-xtls-vision-tls/cert-guide.md); no file of
+# these types is ever needed inside this repository.
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+
+# --- Diagnostics -------------------------------------------------------------
+xray-tproxy-diagnose-*.txt
 
 # macOS
 .DS_Store
