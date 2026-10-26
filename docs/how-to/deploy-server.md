@@ -18,7 +18,7 @@ Deploy the modern kernel parameters to enable BBR congestion control and high-BD
 
 ```sh
 # 1. Copy the tuning configuration
-sudo install -Dm644 ./server/99-xray-tuning.conf /etc/sysctl.d/99-xray-tuning.conf
+sudo install -Dm644 ./host/server/99-xray-tuning.conf /etc/sysctl.d/99-xray-tuning.conf
 
 # 2. Apply parameters immediately
 sudo sysctl --system
@@ -36,11 +36,11 @@ Deploy the unprivileged `xray` service account and the hardened systemd unit:
 
 ```sh
 # 1. Create the dedicated xray service account
-sudo install -Dm644 ./server/xray-server.sysusers.conf /usr/lib/sysusers.d/xray.conf
+sudo install -Dm644 ./host/server/xray-server.sysusers.conf /usr/lib/sysusers.d/xray.conf
 sudo systemd-sysusers
 
 # 2. Install the hardened server unit
-sudo install -Dm644 ./server/xray-server.service /etc/systemd/system/xray-server.service
+sudo install -Dm644 ./host/server/xray-server.service /etc/systemd/system/xray-server.service
 sudo systemctl daemon-reload
 ```
 
@@ -51,7 +51,7 @@ sudo systemctl daemon-reload
 Deploy the stateful nftables firewall to protect the host while keeping ports 22, 80, and 443 open:
 
 ```sh
-sudo install -Dm644 ./server/xray-server.nft /etc/nftables.conf
+sudo install -Dm644 ./host/server/xray-server.nft /etc/nftables.conf
 sudo systemctl enable --now nftables.service
 ```
 

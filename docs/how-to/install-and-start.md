@@ -36,17 +36,17 @@ The split is by whether a value differs per host:
 | Artifact | Layer | Installed by / to |
 |---|---|---|
 | `xray` (the binary) | upstream, unmodified | `wright install xray` |
-| `client/xray-tproxy.service`, `client/xray-tproxy.nft`, `client/xray-tproxy.sysusers.conf`, `client/xray-policy.conf` (template) | solution | `wright install xray-tproxy` → unit, `/etc/nftables/xray-tproxy.nft`, `/usr/lib/sysusers.d/xray.conf`, `/usr/share/xray-tproxy/xray-policy.conf` |
+| `host/client/xray-tproxy.service`, `host/client/xray-tproxy.nft`, `host/client/xray-tproxy.sysusers.conf`, `host/client/xray-policy.conf` (template) | solution | `wright install xray-tproxy` → unit, `/etc/nftables/xray-tproxy.nft`, `/usr/lib/sysusers.d/xray.conf`, `/usr/share/xray-tproxy/xray-policy.conf` |
 | `schemes/<scheme>/client.json` | operator | `/etc/xray/config.json`, mode `600` — holds the user ID and the scheme key |
-| `client/xray-policy.conf` copied into an uplink profile | operator | `/etc/systemd/network/<uplink>.network.d/` — the profile name is host-specific |
+| `host/client/xray-policy.conf` copied into an uplink profile | operator | `/etc/systemd/network/<uplink>.network.d/` — the profile name is host-specific |
 
 ## Install the Solution
 
 ```sh
-sudo install -Dm644 ./client/xray-tproxy.service        /var/lib/wright/plans/xray-tproxy/xray-tproxy.service
-sudo install -Dm644 ./client/xray-tproxy.nft            /var/lib/wright/plans/xray-tproxy/xray-tproxy.nft
-sudo install -Dm644 ./client/xray-policy.conf           /var/lib/wright/plans/xray-tproxy/xray-policy.conf
-sudo install -Dm644 ./client/xray-tproxy.sysusers.conf  /var/lib/wright/plans/xray-tproxy/xray-tproxy.sysusers.conf
+sudo install -Dm644 ./host/client/xray-tproxy.service        /var/lib/wright/plans/xray-tproxy/xray-tproxy.service
+sudo install -Dm644 ./host/client/xray-tproxy.nft            /var/lib/wright/plans/xray-tproxy/xray-tproxy.nft
+sudo install -Dm644 ./host/client/xray-policy.conf           /var/lib/wright/plans/xray-tproxy/xray-policy.conf
+sudo install -Dm644 ./host/client/xray-tproxy.sysusers.conf  /var/lib/wright/plans/xray-tproxy/xray-tproxy.sysusers.conf
 sudo wright install xray-tproxy          # pulls xray and v2ray-rules-dat in
 ```
 
@@ -109,7 +109,7 @@ sudo install -Dm600 $S/client.local.json /etc/xray/config.json
 The `.local.json` suffix is git-ignored, so per-host credentials stay out of
 the repository. `xray run -test` is the check the unit runs before starting,
 so a bad config never replaces a working process; `sudo nft -c -f
-./client/xray-tproxy.nft` does the same for the ruleset.
+./host/client/xray-tproxy.nft` does the same for the ruleset.
 
 `LogsDirectory=xray` makes the unit create and own `/var/log/xray`.
 

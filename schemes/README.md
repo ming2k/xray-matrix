@@ -16,7 +16,7 @@ one deployment come from the same scheme directory, so the values that must
 agree (UUID, `serverName`, short ID) are taken from a single source.
 
 The OS artifacts that do **not** depend on the scheme — nftables rules, unit
-files, sysusers entries, kernel tuning — live in `../client/` and `../server/`.
+files, sysusers entries, kernel tuning — live in `../host/client/` and `../host/server/`.
 
 ---
 
@@ -103,4 +103,4 @@ Do you have a personal domain name pointing to your VPS?
    ```sh
    sudo systemctl restart xray-server.service
    ```
-3. The OS layer (`../client/`, `../server/`) is untouched by a scheme switch.
+3. The OS layer (`../host/client/`, `../host/server/`) is untouched by a scheme switch.

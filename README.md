@@ -25,24 +25,24 @@ This repository provides an integrated, dual-tier solution:
 ## Directory Overview
 
 ```text
-├── schemes/                        # Pluggable transport schemes — one self-contained dir each
+├── schemes/                        # What you run: transport schemes, both ends together
 │   ├── vless-xtls-vision-reality/  #   client.json + server.json + README.md
 │   │                               #   VLESS + Vision + REALITY (zero domain)
 │   └── vless-xtls-vision-tls/      #   VLESS + Vision + TLS (domain & web fallback)
 │                                   #   (+ cert-guide.md)
 │
-├── client/                         # OS layer, scheme-independent: generic Linux TProxy
-│   ├── xray-tproxy.service
-│   ├── xray-tproxy.sysusers.conf
-│   ├── xray-tproxy.nft
-│   └── xray-policy.conf
-│
-├── server/                         # OS layer, scheme-independent: VPS egress node
-│   ├── xray-server.service
-│   ├── xray-server.sysusers.conf
-│   ├── xray-server.nft
-│   ├── 99-xray-tuning.conf
-│   └── fallback/{nginx,caddy}/     # Disguise website, used by the TLS scheme only
+├── host/                           # Where it runs: OS artifacts, identical for every scheme
+│   ├── client/                     #   Generic Linux TProxy (workstation / gateway)
+│   │   ├── xray-tproxy.service
+│   │   ├── xray-tproxy.sysusers.conf
+│   │   ├── xray-tproxy.nft
+│   │   └── xray-policy.conf
+│   └── server/                     #   VPS egress node
+│       ├── xray-server.service
+│       ├── xray-server.sysusers.conf
+│       ├── xray-server.nft
+│       ├── 99-xray-tuning.conf
+│       └── fallback/{nginx,caddy}/ #   Disguise website, used by the TLS scheme only
 │
 └── docs/                           # Comprehensive Diátaxis Documentation
     ├── how-to/                     # Task-oriented guides (Client & Server)
@@ -52,13 +52,14 @@ This repository provides an integrated, dual-tier solution:
 
 Two layers, and they never overlap:
 
-- **A scheme** is picked, not composed. Its directory carries the *whole* Xray
-  configuration for both ends (`client.json`, `server.json`) plus its own
-  documentation; adding a transport means adding one directory. Anything that
-  changes when you switch schemes lives there.
-- **`client/` and `server/`** hold the OS artifacts — nftables rules, unit files,
-  sysusers entries, kernel tuning, the fallback site. These are identical no
-  matter which scheme you run, so they exist once.
+- **`schemes/`** — *what you run*. A scheme is picked, not composed: its
+  directory carries the whole Xray configuration for both ends (`client.json`,
+  `server.json`) plus its own documentation, so adding a transport means adding
+  one directory.
+- **`host/`** — *where it runs*. nftables rules, unit files, sysusers entries,
+  kernel tuning, the fallback site: identical whichever scheme runs, so they
+  exist once. `host/client/` is the generic Linux TProxy; `host/server/` is the
+  VPS egress node.
 
 Host-specific values (server address, UUID, keys, uplink name) are never
 committed: copy a scheme config to a sibling `*.local.json` and fill it in —
@@ -71,10 +72,10 @@ committed: copy a scheme config to a sibling `*.local.json` and fill it in —
 ### 1. Client Setup (Workstation / Gateway)
 
 ```sh
-# 1. Install the OS layer (scheme-independent, from client/)
-sudo install -Dm644 ./client/xray-tproxy.service /etc/systemd/system/
-sudo install -Dm644 ./client/xray-tproxy.nft /etc/nftables/xray-tproxy.nft
-sudo install -Dm644 ./client/xray-tproxy.sysusers.conf /usr/lib/sysusers.d/xray.conf
+# 1. Install the OS layer (scheme-independent, from host/client/)
+sudo install -Dm644 ./host/client/xray-tproxy.service /etc/systemd/system/
+sudo install -Dm644 ./host/client/xray-tproxy.nft /etc/nftables/xray-tproxy.nft
+sudo install -Dm644 ./host/client/xray-tproxy.sysusers.conf /usr/lib/sysusers.d/xray.conf
 sudo systemd-sysusers
 
 # 2. Deploy a scheme: copy the template, fill in the local values
@@ -85,7 +86,7 @@ xray run -test -config $SCHEME/client.local.json
 sudo install -Dm600 $SCHEME/client.local.json /etc/xray/config.json
 
 # 3. Configure networkd policy routing drop-in
-sudo install -Dm644 ./client/xray-policy.conf \
+sudo install -Dm644 ./host/client/xray-policy.conf \
   /etc/systemd/network/<uplink>.network.d/xray-policy.conf
 
 # 4. Reconfigure network and start
@@ -98,16 +99,16 @@ sudo systemctl enable --now xray-tproxy.service
 
 ```sh
 # 1. Apply BBR kernel tuning and buffer optimization
-sudo install -Dm644 ./server/99-xray-tuning.conf /etc/sysctl.d/
+sudo install -Dm644 ./host/server/99-xray-tuning.conf /etc/sysctl.d/
 sudo sysctl --system
 
 # 2. Install unprivileged service account & hardened systemd unit
-sudo install -Dm644 ./server/xray-server.sysusers.conf /usr/lib/sysusers.d/xray.conf
+sudo install -Dm644 ./host/server/xray-server.sysusers.conf /usr/lib/sysusers.d/xray.conf
 sudo systemd-sysusers
-sudo install -Dm644 ./server/xray-server.service /etc/systemd/system/
+sudo install -Dm644 ./host/server/xray-server.service /etc/systemd/system/
 
 # 3. Apply stateful firewall
-sudo install -Dm644 ./server/xray-server.nft /etc/nftables.conf
+sudo install -Dm644 ./host/server/xray-server.nft /etc/nftables.conf
 sudo systemctl enable --now nftables.service
 
 # 4. Deploy the server half of the same scheme

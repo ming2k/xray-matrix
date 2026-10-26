@@ -22,10 +22,10 @@ Deploy the local Nginx fallback server listening on `127.0.0.1:8080` with PROXY 
 ```sh
 # 1. Install website files
 sudo mkdir -p /var/www/fallback
-sudo cp ./server/fallback/nginx/www/index.html /var/www/fallback/index.html
+sudo cp ./host/server/fallback/nginx/www/index.html /var/www/fallback/index.html
 
 # 2. Deploy Nginx configuration
-sudo cp ./server/fallback/nginx/nginx.conf /etc/nginx/nginx.conf
+sudo cp ./host/server/fallback/nginx/nginx.conf /etc/nginx/nginx.conf
 
 # 3. Test and restart Nginx
 sudo nginx -t

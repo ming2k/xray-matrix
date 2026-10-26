@@ -76,7 +76,7 @@ See [Traffic Selection Reference](../reference/traffic-selection.md) and [Data P
 | **Client fwmark policy rule** | `systemd-networkd` drop-in (`xray-policy.conf`), installed per uplink; unit repairs if missing |
 | **Client Xray daemon** | `xray-tproxy.service`, running as unprivileged user `xray` |
 | **Server Kernel Tuning** | `sysctl.d/99-xray-tuning.conf` (BBR, TFO, socket buffers) |
-| **Server Firewall** | `server/xray-server.nft` |
+| **Server Firewall** | `host/server/xray-server.nft` |
 | **Server Xray daemon** | `xray-server.service`, running as unprivileged user `xray` with `CAP_NET_BIND_SERVICE` |
 | **Server Web Fallback** | Local Nginx or Caddy listening on `127.0.0.1:8080` |
 

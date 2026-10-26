@@ -38,7 +38,7 @@ If a censor's active scanner connects to port 443:
 2. The scanner sends an HTTP probe (`GET / HTTP/1.1`, invalid handshake data, or randomized bytes).
 3. Xray inspects the decrypted stream: because the payload does not begin with a valid VLESS header and matching UUID, Xray triggers the `fallbacks` handler.
 4. Xray prepends a PROXY protocol header (`xver: 1`, preserving the scanner's real IP) and pipes the socket directly to local Nginx on `127.0.0.1:8080`.
-5. Nginx parses the request and returns a standard `200 OK` response with a realistic static website (`server/fallback/nginx/www/index.html`).
+5. Nginx parses the request and returns a standard `200 OK` response with a realistic static website (`host/server/fallback/nginx/www/index.html`).
 6. To the scanner, the endpoint behaves identically to an ordinary HTTPS web server hosting documentation or a portfolio.
 
 ### 2.3 XTLS-Vision Protection
@@ -53,13 +53,13 @@ When an authenticated client connects:
 ### Step 1: Deploy Web Fallback & Tuning (Server)
 ```sh
 # 1. Apply kernel tuning
-sudo cp server/99-xray-tuning.conf /etc/sysctl.d/
+sudo cp host/server/99-xray-tuning.conf /etc/sysctl.d/
 sudo sysctl --system
 
 # 2. Deploy Nginx fallback site
-sudo cp server/fallback/nginx/nginx.conf /etc/nginx/nginx.conf
+sudo cp host/server/fallback/nginx/nginx.conf /etc/nginx/nginx.conf
 sudo mkdir -p /var/www/fallback
-sudo cp server/fallback/nginx/www/index.html /var/www/fallback/
+sudo cp host/server/fallback/nginx/www/index.html /var/www/fallback/
 sudo systemctl restart nginx
 ```
 

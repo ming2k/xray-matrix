@@ -27,7 +27,7 @@ rules become active.
   Package artifacts are the exception, shipped through two local `wright`
   plans whose copies must stay identical to the repository copies:
   `xray` (upstream binary only) and `xray-tproxy` (the solution: the four
-  files under `client/` — unit, `/etc/nftables/xray-tproxy.nft`, sysusers
+  files under `host/client/` — unit, `/etc/nftables/xray-tproxy.nft`, sysusers
   entry, networkd template; `runtime_deps = ['xray', 'v2ray-rules-dat']`).
   A package may only carry values that do not differ per host.
 - No installer scripts, timers or `/usr/libexec` helpers. Unit behaviour
@@ -42,7 +42,7 @@ rules become active.
 - Never commit `schemes/**/*.local.json` — those files carry real server
   credentials and are covered by `.gitignore`. Rotate credentials
   immediately if one is ever committed.
-- `client/xray-tproxy.nft` changes should keep the bypass semantics
+- `host/client/xray-tproxy.nft` changes should keep the bypass semantics
   documented in `docs/reference/traffic-selection.md` in sync.
 - A scheme config is complete and self-contained, so a scheme directory may
   only differ from its siblings in the outbound (`client.json`) and inbound
