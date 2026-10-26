@@ -22,7 +22,9 @@ Entry point for the project documentation.
 
 | Page | Lookup target |
 |------|---------------|
-| [Transport Schemes](../schemes/README.md) | Threat models, protocol comparison, cipher suites, and selection |
+| [Transport Schemes](../schemes/README.md) | Scheme comparison, selection, probe-response behaviour, switching |
+| [REALITY Scheme](../schemes/vless-xtls-vision-reality/README.md) | The Session ID channel, probe deflection, key generation |
+| [TLS + Fallback Scheme](../schemes/vless-xtls-vision-tls/README.md) | One port, two behaviours, PROXY protocol, certificate setup |
 | [Client Configuration Reference](reference/client-configuration.md) | Client Xray keys, placeholders, and routing rules |
 | [Server Configuration Reference](reference/server-configuration.md) | Server Xray keys, fallbacks, and stream settings |
 | [Traffic Selection Reference](reference/traffic-selection.md) | What nftables intercepts and what it bypasses |
@@ -41,9 +43,7 @@ Entry point for the project documentation.
 ### Cryptographic & Anti-Censorship Mechanisms
 | Page | Topic |
 |------|-------|
-| [XTLS-Vision Mechanism](explanation/mechanisms/xtls-vision.md) | TLS-in-TLS padding obfuscation and Linux kernel zero-copy splice |
-| [REALITY Protocol Mechanism](explanation/mechanisms/reality.md) | Session ID ECDH handshake and active probing deflection |
-| [Standard TLS with Fallback](explanation/mechanisms/tls-fallback.md) | Protocol demultiplexing, PROXY protocol v1, and disguise web server |
+| [XTLS-Vision Mechanism](explanation/mechanisms/xtls-vision.md) | TLS-in-TLS padding obfuscation and Linux kernel zero-copy splice (shared by both schemes) |
 
 ## Contributor
 

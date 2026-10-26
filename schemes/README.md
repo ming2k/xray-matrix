@@ -1,14 +1,14 @@
 # Transport Schemes
 
-One directory per transport scheme, and each one is self-contained and
-deployable as-is:
+One directory per transport scheme, each self-contained and deployable as-is:
 
 | File | Contents |
 |------|----------|
 | `client.json` | The complete client Xray config: transparent-proxy datapath (TProxy inbound, Smart DNS, routing, policy) plus this scheme's outbound. |
 | `server.json` | The complete server Xray config: this scheme's inbound plus the `freedom` / `blackhole` outbounds. |
-| `README.md` | Mechanism, threat model, key generation, and operational notes. |
+| `README.md` | Mechanism, threat model, key generation, operational limits — the scheme's own documentation. |
 | `client.local.json`, `server.local.json` | Your host-specific copy of a config with real credentials. Never committed (`.gitignore`). |
+| *(scheme-specific extras)* | Only if the scheme needs one, e.g. `vless-xtls-vision-tls/cert-guide.md`. |
 
 Deploy a scheme by copying its config to a sibling `.local.json`, filling in
 every `<PLACEHOLDER:...>`, and validating with `xray run -test`. Both ends of
@@ -16,7 +16,15 @@ one deployment come from the same scheme directory, so the values that must
 agree (UUID, `serverName`, short ID) are taken from a single source.
 
 The OS artifacts that do **not** depend on the scheme — nftables rules, unit
-files, sysusers entries, kernel tuning — live in `../host/client/` and `../host/server/`.
+files, sysusers entries, kernel tuning — live in `../host/client/` and
+`../host/server/`.
+
+The two schemes share XTLS-Vision and a whole client datapath, and differ only
+in the outer security layer. Everything else about them — what the server
+does with an unauthenticated connection — is in each scheme's `README.md`:
+
+- [VLESS + Vision + REALITY](vless-xtls-vision-reality/README.md)
+- [VLESS + Vision + TLS with Web Fallback](vless-xtls-vision-tls/README.md)
 
 ---
 
@@ -64,28 +72,28 @@ Do you have a personal domain name pointing to your VPS?
 
 ---
 
-## 3. Threat Models & Defense Strategies
+## 3. How Each Defense Answers a Probe
 
-### Threat 1: Active Probing (主动探测)
-* **The Attack**: The censor's DPI engine detects an anomalous TLS connection to a foreign IP. Automated scanners then replay the TLS handshake or send randomized HTTP/TLS payloads to port 443 to observe how the server responds.
-* **REALITY Defense**:
-  - The server inspects the TLS `Session ID` (carrying an ECDH public key and HMAC auth tag).
-  - If valid: Xray terminates the connection and accepts the VLESS session.
-  - If invalid (active scanner): Xray transparently connects to the genuine destination server (`dest`, e.g., Apple or Google) on port 443 and pipes the scanner's raw packets directly through. The scanner receives 100% authentic TLS handshake responses signed by Apple's private key.
-* **TLS + Fallback Defense**:
-  - The server terminates standard TLS with a genuine certificate.
-  - If the client payload starts with a valid VLESS header and UUID, it routes into the proxy tunnel.
-  - If the payload is normal HTTP or probe garbage, Xray triggers `fallbacks` and hands the socket over to local Nginx/Caddy on port 8080 via the PROXY protocol (`xver: 1`). The scanner receives standard HTTP 200/404 responses from a real web server.
+Both schemes survive active probing, by opposite means: REALITY never refuses,
+and TLS-fallback serves a real site. The observable behaviour differs per probe
+type, and that difference is what to weigh when picking between them.
 
-### Threat 2: TLS-in-TLS Pattern Recognition (双层 TLS 模式识别)
-* **The Attack**: When browsing HTTPS websites through a TLS proxy, inner TLS records are wrapped inside outer TLS records. Record sizes correlate in a deterministic pattern that machine learning DPI detects without decrypting the payload.
-* **XTLS-Vision Defense**:
-  - **Handshake phase**: Injects randomized padding records (`Vision Padding`) during the initial exchange, destroying the deterministic record length correlation.
-  - **Data phase**: Once inner TLS is verified, Vision switches to zero-copy direct streaming (`splice()` on Linux). The outer layer stops double-encrypting already encrypted TLS packets, matching the profile of a native TLS stream with zero CPU overhead.
+| Probe | REALITY | TLS + Fallback |
+| :--- | :--- | :--- |
+| Direct IP, no SNI | Forwarded to `dest` | Rejected in the handshake (`rejectUnknownSni`) |
+| Wrong SNI | Forwarded to `dest` | Rejected in the handshake (`rejectUnknownSni`) |
+| Valid SNI + HTTP GET | Forwarded to `dest` | Served the local static site, `200 OK` |
+| Valid SNI + random bytes | Forwarded to `dest` | Nginx parses garbage, `400 Bad Request` |
+| Certificate seen | The borrowed certificate from `dest` | A genuine certificate issued to your domain |
+
+A rejection (row 1 and 2 for the TLS scheme) is not a weakness where the
+domain is yours: an unknown SNI failing a handshake is what any correctly
+configured web server does. It would be a weakness for a borrowed identity,
+which is why REALITY cannot do it.
 
 ---
 
-## 4. How to Switch Schemes
+## 4. Switching Schemes
 
 1. **Client**: copy `schemes/<scheme>/client.json` to `client.local.json` in
    the same directory, fill in the placeholders, validate, and install:
@@ -103,4 +111,6 @@ Do you have a personal domain name pointing to your VPS?
    ```sh
    sudo systemctl restart xray-server.service
    ```
-3. The OS layer (`../host/client/`, `../host/server/`) is untouched by a scheme switch.
+3. The OS layer (`../host/client/`, `../host/server/`) is untouched by a scheme
+   switch: the client datapath, the unit files, the firewall and the kernel
+   tuning are identical for every scheme.
