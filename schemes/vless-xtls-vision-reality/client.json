@@ -1,0 +1,293 @@
+// Complete Client Configuration for VLESS + TCP + XTLS-Vision + REALITY
+// Deploy to: /etc/xray/config.json
+{
+  "log": {
+    "loglevel": "info",
+    "error": "/var/log/xray/error.log",
+    "access": "/var/log/xray/access.log"
+  },
+  "dns": {
+    "servers": [
+      {
+        "address": "localhost",
+        "domains": [
+          "geosite:private",
+          "domain:local",
+          "domain:lan",
+          "domain:home.arpa",
+          "domain:connectivitycheck.gstatic.com",
+          "domain:captive.apple.com",
+          "domain:detectportal.firefox.com",
+          "domain:msftconnecttest.com",
+          "domain:msftncsi.com",
+          "domain:kimi.ai",
+          "domain:moonshot.ai",
+          "domain:minimax.io",
+          "domain:qoder.com",
+          "domain:lovart.ai"
+        ],
+        "skipFallback": true
+      },
+      {
+        "address": "https://1.1.1.1/dns-query",
+        "domains": [
+          "geosite:geolocation-!cn",
+          "geosite:google",
+          "geosite:category-ai-!cn",
+          "geosite:github"
+        ]
+      },
+      {
+        "address": "223.5.5.5",
+        "domains": [
+          "geosite:cn"
+        ]
+      },
+      "https://1.1.1.1/dns-query"
+    ],
+    "queryStrategy": "UseIPv4",
+    "disableFallbackIfMatch": true,
+    "serveStale": true,
+    "serveExpiredTTL": 3600
+  },
+  "stats": {},
+  "policy": {
+    "system": {
+      "statsInboundUplink": true,
+      "statsInboundDownlink": true,
+      "statsOutboundUplink": true,
+      "statsOutboundDownlink": true
+    }
+  },
+  "api": {
+    "tag": "api",
+    "services": ["StatsService", "HandlerService", "RoutingService"]
+  },
+  "inbounds": [
+    {
+      "tag": "all-in",
+      "listen": "127.0.0.1",
+      "port": 12345,
+      "protocol": "dokodemo-door",
+      "settings": {
+        "network": "tcp,udp",
+        "followRedirect": true
+      },
+      "sniffing": {
+        "enabled": true,
+        "destOverride": ["http", "tls", "quic"],
+        "routeOnly": true
+      },
+      "streamSettings": {
+        "sockopt": {
+          "tproxy": "tproxy"
+        }
+      }
+    },
+    {
+      "tag": "socks-in",
+      "listen": "127.0.0.1",
+      "port": 1080,
+      "protocol": "socks",
+      "settings": {
+        "auth": "noauth",
+        "udp": true
+      },
+      "sniffing": {
+        "enabled": true,
+        "destOverride": ["http", "tls", "quic"],
+        "routeOnly": true
+      }
+    },
+    {
+      "tag": "api",
+      "listen": "127.0.0.1",
+      "port": 10085,
+      "protocol": "dokodemo-door",
+      "settings": {
+        "address": "127.0.0.1"
+      }
+    }
+  ],
+  "outbounds": [
+    {
+      "protocol": "vless",
+      "tag": "proxy",
+      "settings": {
+        "vnext": [
+          {
+            "address": "<SERVER_IP:203.0.113.10>",
+            "port": 443,
+            "users": [
+              {
+                "id": "<UUID:a1b2c3d4-e5f6-7890-abcd-ef1234567890>",
+                "encryption": "none",
+                "flow": "xtls-rprx-vision"
+              }
+            ]
+          }
+        ]
+      },
+      "streamSettings": {
+        "network": "tcp",
+        "security": "reality",
+        "realitySettings": {
+          "show": false,
+          "fingerprint": "chrome",
+          "serverName": "<SERVER_NAME:example.com>",
+          "publicKey": "<PUBLIC_KEY:REDACTED_PUBLIC_KEY>",
+          "shortId": "<SHORT_ID:0123456789abcdef>",
+          "spiderX": "/"
+        },
+        "sockopt": {
+          "tcpFastOpen": true,
+          "happyEyeballs": {},
+          "mark": 2,
+          "tcpKeepAliveIdle": 15,
+          "tcpKeepAliveInterval": 5
+        }
+      }
+    },
+    {
+      "protocol": "freedom",
+      "tag": "direct",
+      "streamSettings": {
+        "sockopt": {
+          "domainStrategy": "UseIPv4v6",
+          "tcpFastOpen": true,
+          "happyEyeballs": {},
+          "mark": 2,
+          "tcpKeepAliveIdle": 15,
+          "tcpKeepAliveInterval": 5
+        }
+      }
+    },
+    {
+      "protocol": "dns",
+      "tag": "dns-out"
+    },
+    {
+      "protocol": "blackhole",
+      "tag": "blocked"
+    }
+  ],
+  "routing": {
+    "domainStrategy": "IPIfNonMatch",
+    "rules": [
+      {
+        "type": "field",
+        "inboundTag": ["api"],
+        "outboundTag": "api"
+      },
+      {
+        "type": "field",
+        "inboundTag": [
+          "all-in",
+          "socks-in"
+        ],
+        "port": 53,
+        "outboundTag": "dns-out"
+      },
+      {
+        "type": "field",
+        "ip": [
+          "<SERVER_IP:203.0.113.10>",
+          "<SERVER_IP_2:198.51.100.20>"
+        ],
+        "outboundTag": "direct"
+      },
+      {
+        "type": "field",
+        "domain": ["domain:<OWN_DOMAIN:example.com>"],
+        "outboundTag": "direct"
+      },
+      {
+        "type": "field",
+        "domain": [
+          "domain:connectivitycheck.gstatic.com",
+          "domain:captive.apple.com",
+          "domain:detectportal.firefox.com",
+          "domain:msftconnecttest.com",
+          "domain:msftncsi.com"
+        ],
+        "outboundTag": "direct"
+      },
+      {
+        "type": "field",
+        "domain": [
+          "domain:kimi.ai",
+          "domain:moonshot.ai",
+          "domain:minimax.io",
+          "domain:qoder.com",
+          "domain:lovart.ai"
+        ],
+        "outboundTag": "direct"
+      },
+      {
+        "type": "field",
+        "domain": [
+          "geosite:github"
+        ],
+        "outboundTag": "proxy"
+      },
+      {
+        "type": "field",
+        "domain": [
+          "geosite:category-ads-all"
+        ],
+        "outboundTag": "blocked"
+      },
+      {
+        "type": "field",
+        "protocol": [ "bittorrent" ],
+        "outboundTag": "blocked"
+      },
+      {
+        "type": "field",
+        "ip": ["geoip:private"],
+        "outboundTag": "direct"
+      },
+      {
+        "type": "field",
+        "network": "udp",
+        "port": 443,
+        "outboundTag": "blocked"
+      },
+      {
+        "type": "field",
+        "domain": [
+          "full:ftp.gnu.org",
+          "domain:gnu.org",
+          "domain:kernel.org"
+        ],
+        "outboundTag": "proxy"
+      },
+      {
+        "type": "field",
+        "domain": [
+          "geosite:google",
+          "geosite:category-ai-!cn"
+        ],
+        "outboundTag": "proxy"
+      },
+      {
+        "type": "field",
+        "domain": [
+          "geosite:private",
+          "geosite:cn"
+        ],
+        "outboundTag": "direct"
+      },
+      {
+        "type": "field",
+        "ip": ["geoip:cn"],
+        "outboundTag": "direct"
+      },
+      {
+        "type": "field",
+        "network": "tcp,udp",
+        "outboundTag": "proxy"
+      }
+    ]
+  }
+}

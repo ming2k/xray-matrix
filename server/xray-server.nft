@@ -1,0 +1,41 @@
+#!/usr/sbin/nft -f
+# Modern, stateful nftables baseline firewall for Xray proxy servers.
+# Deployed to /etc/nftables.conf or included as a dedicated table.
+
+flush ruleset
+
+table inet filter {
+  chain input {
+    type filter hook input priority filter; policy drop;
+
+    # Accept loopback traffic
+    iif "lo" accept
+
+    # Accept established and related connections
+    ct state established,related accept
+
+    # Drop invalid packets early
+    ct state invalid drop
+
+    # Accept ICMP & ICMPv6 (Path MTU discovery, ping)
+    ip protocol icmp accept
+    ip6 nexthdr ipv6-icmp accept
+
+    # SSH (change port if using a non-standard port)
+    tcp dport 22 accept
+
+    # Web & Proxy ports (HTTP for ACME challenges/redirect, HTTPS for Xray/Reality/TLS)
+    tcp dport { 80, 443 } accept
+
+    # If running UDP protocols (e.g. Hysteria2, TUIC, or custom Xray UDP port)
+    # udp dport 443 accept
+  }
+
+  chain forward {
+    type filter hook forward priority filter; policy accept;
+  }
+
+  chain output {
+    type filter hook output priority filter; policy accept;
+  }
+}

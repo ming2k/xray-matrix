@@ -1,0 +1,83 @@
+// Complete Server Configuration for VLESS + TCP + XTLS-Vision + TLS
+// Deploy to: /etc/xray/config.json
+{
+  "log": {
+    "loglevel": "warning",
+    "error": "/var/log/xray/error.log",
+    "access": "/var/log/xray/access.log"
+  },
+  "inbounds": [
+    {
+      "listen": "0.0.0.0",
+      "port": 443,
+      "protocol": "vless",
+      "settings": {
+        "clients": [
+          {
+            "id": "<UUID:a1b2c3d4-e5f6-7890-abcd-ef1234567890>",
+            "flow": "xtls-rprx-vision"
+          }
+        ],
+        "decryption": "none",
+        "fallbacks": [
+          {
+            // Forwards non-proxy web traffic and scanner probes to local Nginx
+            "dest": "127.0.0.1:8080",
+            "xver": 1
+          }
+        ]
+      },
+      "streamSettings": {
+        "network": "tcp",
+        "security": "tls",
+        "tlsSettings": {
+          "rejectUnknownSni": true,
+          "minVersion": "1.2",
+          "alpn": [
+            "h2",
+            "http/1.1"
+          ],
+          "certificates": [
+            {
+              "certificateFile": "/etc/letsencrypt/live/<SERVER_DOMAIN:node.example.com>/fullchain.pem",
+              "keyFile": "/etc/letsencrypt/live/<SERVER_DOMAIN:node.example.com>/privkey.pem",
+              "ocspStapling": 3600
+            }
+          ]
+        },
+        "sockopt": {
+          "tcpFastOpen": true
+        }
+      },
+      "sniffing": {
+        "enabled": true,
+        "destOverride": ["http", "tls", "quic"]
+      }
+    }
+  ],
+  "outbounds": [
+    {
+      "protocol": "freedom",
+      "tag": "direct",
+      "streamSettings": {
+        "sockopt": {
+          "domainStrategy": "UseIPv4v6"
+        }
+      }
+    },
+    {
+      "protocol": "blackhole",
+      "tag": "blocked"
+    }
+  ],
+  "routing": {
+    "domainStrategy": "IPIfNonMatch",
+    "rules": [
+      {
+        "type": "field",
+        "protocol": ["bittorrent"],
+        "outboundTag": "blocked"
+      }
+    ]
+  }
+}

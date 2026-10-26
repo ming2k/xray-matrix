@@ -1,0 +1,32 @@
+# Caddyfile for Xray TLS Fallback Architecture
+# Receives connections forwarded by Xray from port 443.
+# Can also run as the primary front-end if reverse proxying to Xray.
+
+{
+    admin off
+    servers :8080 {
+        listener_wrappers {
+            proxy_protocol {
+                timeout 5s
+                allow 127.0.0.1/32 ::1/128
+            }
+        }
+    }
+}
+
+:8080 {
+    bind 127.0.0.1 ::1
+    root * /var/www/fallback
+    file_server
+
+    header {
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "SAMEORIGIN"
+        Referrer-Policy "strict-origin-when-cross-origin"
+        -Server
+    }
+
+    handle_errors {
+        respond "{err.status_code} {err.status_text}"
+    }
+}

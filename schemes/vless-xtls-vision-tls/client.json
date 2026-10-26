@@ -1,5 +1,5 @@
-// XTLS/REALITY reference: https://github.com/XTLS/REALITY
-// Xray installation: https://github.com/XTLS/Xray-install
+// Complete Client Configuration for VLESS + TCP + XTLS-Vision + TLS
+// Deploy to: /etc/xray/config.json
 {
   "log": {
     "loglevel": "info",
@@ -38,9 +38,6 @@
         ]
       },
       {
-        // Domestic resolver. No expectedIPs filter: when a CN domain has a
-        // legitimate overseas edge, filtering the answer sends the name to
-        // the DoH fallback and then connects direct to a foreign IP.
         "address": "223.5.5.5",
         "domains": [
           "geosite:cn"
@@ -49,13 +46,10 @@
       "https://1.1.1.1/dns-query"
     ],
     "queryStrategy": "UseIPv4",
-    // First matching server wins, and a matching server never falls through.
     "disableFallbackIfMatch": true,
-    // Answer from cache while the upstream is unreachable.
     "serveStale": true,
     "serveExpiredTTL": 3600
   },
-  // Per-outbound byte counters: read with `xray api statsquery`.
   "stats": {},
   "policy": {
     "system": {
@@ -65,14 +59,12 @@
       "statsOutboundDownlink": true
     }
   },
-  // Local gRPC surface for statsquery. Loopback only.
   "api": {
     "tag": "api",
     "services": ["StatsService", "HandlerService", "RoutingService"]
   },
   "inbounds": [
     {
-      // TProxy redirects to loopback; 0.0.0.0 would expose the port to the LAN.
       "tag": "all-in",
       "listen": "127.0.0.1",
       "port": 12345,
@@ -108,7 +100,6 @@
       }
     },
     {
-      // Admin surface: HandlerService can change routing at runtime.
       "tag": "api",
       "listen": "127.0.0.1",
       "port": 10085,
@@ -125,8 +116,8 @@
       "settings": {
         "vnext": [
           {
-            "address": "<SERVER_IP:203.0.113.10>",
-            "port": 10443,
+            "address": "<SERVER_DOMAIN:node.example.com>",
+            "port": 443,
             "users": [
               {
                 "id": "<UUID:a1b2c3d4-e5f6-7890-abcd-ef1234567890>",
@@ -139,17 +130,17 @@
       },
       "streamSettings": {
         "network": "tcp",
-        "security": "reality",
-        "realitySettings": {
-          "show": false,
+        "security": "tls",
+        "tlsSettings": {
+          "serverName": "<SERVER_DOMAIN:node.example.com>",
           "fingerprint": "chrome",
-          "serverName": "<SERVER_NAME:example.com>",
-          "publicKey": "<PUBLIC_KEY:REDACTED_PUBLIC_KEY>",
-          "shortId": "<SHORT_ID:0123456789abcdef>",
-          "spiderX": "/"
+          "alpn": [
+            "h2",
+            "http/1.1"
+          ],
+          "allowInsecure": false
         },
         "sockopt": {
-          // TFO needs net.ipv4.tcp_fastopen to include the client bit (1 or 3).
           "tcpFastOpen": true,
           "happyEyeballs": {},
           "mark": 2,
@@ -185,7 +176,6 @@
     "domainStrategy": "IPIfNonMatch",
     "rules": [
       {
-        // Must stay first: a proxied API request breaks statsquery.
         "type": "field",
         "inboundTag": ["api"],
         "outboundTag": "api"
@@ -200,8 +190,6 @@
         "outboundTag": "dns-out"
       },
       {
-        // Every server address this profile talks to. Keep all of them
-        // here: a proxied connection to the proxy itself would loop.
         "type": "field",
         "ip": [
           "<SERVER_IP:203.0.113.10>",
@@ -210,15 +198,11 @@
         "outboundTag": "direct"
       },
       {
-        // Hosts you reach directly by name, e.g. your own panel or site.
         "type": "field",
-        "domain": ["domain:<OWN_DOMAIN:example.com>"],
+        "domain": ["domain:<SERVER_DOMAIN:node.example.com>"],
         "outboundTag": "direct"
       },
       {
-        // Connectivity checks must see the local link, not the tunnel. This
-        // sits before every proxy rule: geosite:google and geolocation-!cn
-        // both contain these names, so later placement silently shadows it.
         "type": "field",
         "domain": [
           "domain:connectivitycheck.gstatic.com",
@@ -230,8 +214,6 @@
         "outboundTag": "direct"
       },
       {
-        // Domestic AI providers that the !cn AI category also lists. Without
-        // this rule they would leave through the tunnel and come back.
         "type": "field",
         "domain": [
           "domain:kimi.ai",
@@ -243,7 +225,6 @@
         "outboundTag": "direct"
       },
       {
-        // Source-hosting that must work with git/ssh over the proxy.
         "type": "field",
         "domain": [
           "geosite:github"
@@ -251,7 +232,6 @@
         "outboundTag": "proxy"
       },
       {
-        // Ad and tracker domains are dropped, not proxied.
         "type": "field",
         "domain": [
           "geosite:category-ads-all"
@@ -259,9 +239,6 @@
         "outboundTag": "blocked"
       },
       {
-        // Dropped, not "direct": sending torrents direct exposes the real IP
-        // without bypassing anything. Use "proxy" instead if you accept the
-        // server's terms of service and want the traffic tunnelled.
         "type": "field",
         "protocol": [ "bittorrent" ],
         "outboundTag": "blocked"
@@ -272,20 +249,12 @@
         "outboundTag": "direct"
       },
       {
-        // QUIC is dropped for everything not already direct above, and this
-        // must precede every proxy rule. Routing is per packet but only the
-        // first QUIC packet carries an SNI, so a domain rule in front of this
-        // one tunnels the first packet and drops the rest of the same
-        // connection: the browser then stalls on QUIC before falling back to
-        // HTTP/2. Dropping it uniformly keeps that fallback immediate.
-        // The tunnel is TCP (Vision), where QUIC would be UDP-in-TCP anyway.
         "type": "field",
         "network": "udp",
         "port": 443,
         "outboundTag": "blocked"
       },
       {
-        // Mirrors that are faster and unthrottled through the tunnel.
         "type": "field",
         "domain": [
           "full:ftp.gnu.org",
@@ -295,9 +264,6 @@
         "outboundTag": "proxy"
       },
       {
-        "type": "field",
-        // The category covers 193 names (copilot, gemini, openrouter,
-        // cerebras, ...); openai + anthropic alone covered a fraction.
         "type": "field",
         "domain": [
           "geosite:google",
@@ -326,5 +292,3 @@
     ]
   }
 }
-// vim: set ft=jsonc:
-
