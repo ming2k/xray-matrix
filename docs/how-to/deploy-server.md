@@ -1,100 +1,97 @@
 # How to Deploy an Xray Proxy Server on a VPS
 
-This guide walks through setting up a hardened, production-grade Xray server on a clean Linux VPS (Ubuntu/Debian) using modern best practices.
-
----
+The server half of a deployment: the OS layer first, then one scheme's server
+config. The literal command sequence is in the
+[Quick Start](../../README.md#quick-start); this guide covers prerequisites,
+the choice of scheme, and how to confirm the result.
 
 ## Prerequisites
 
-- A Linux VPS with a public IPv4 (and optional IPv6) address running Ubuntu 22.04+ or Debian 12+.
+- A Linux VPS with a public IPv4 (and optional IPv6) address running Ubuntu
+  22.04+ or Debian 12+.
 - Root access to the server.
-- The `xray` binary installed on the system (e.g. via [Xray-install](https://github.com/XTLS/Xray-install) or manual extraction to `/usr/bin/xray`).
+- The `xray` binary installed on the system (for example via
+  [Xray-install](https://github.com/XTLS/Xray-install), or manually at
+  `/usr/bin/xray`).
+- `geoip.dat` / `geosite.dat` if the server config uses geo rules. The shipping
+  server configs do not route by geo, so this is only needed when you add
+  rules that do.
 
----
+## What the OS Layer Does
 
-## Step 1: Apply Kernel Tuning (BBR & TCP Buffers)
+Four artifacts, each with one job. What their settings actually are, and what
+they own while running, is in the
+[Host Artifacts Reference](../reference/host-artifacts.md); the reason to know
+them individually is that a failure in any one produces the same symptom — a
+service that starts and does not pass traffic.
 
-Deploy the modern kernel parameters to enable BBR congestion control and high-BDP buffer sizing:
+| Artifact | Job |
+|----------|-----|
+| Kernel tuning | BBR congestion control and 64 MB socket buffers, so a single tunnel can saturate a long-haul path |
+| Service account | An unprivileged `xray` user; the daemon never runs as root |
+| Hardened unit | Sandbox, `CAP_NET_BIND_SERVICE` for port 443, and an `xray run -test` preflight so a bad config cannot replace a working process |
+| Firewall | Stateful nftables: drop invalid packets, admit SSH, 80 and 443, allow established flows |
+
+The unit is deliberately short on lifecycle: the server owns no kernel state
+beyond its listening socket, so there are no tables to load and no routes to
+repair. That is the main structural difference from the client.
+
+## Choose the Scheme
+
+The client and the server must run the **same** scheme directory. Pick by
+whether you have a domain:
+
+### Option A: VLESS + Vision + REALITY (zero domain)
+
+Nothing to register and nothing to renew; the server borrows a third-party TLS
+identity and relays unauthenticated probes to that real site. Generate the
+keys, then fill in the server config:
 
 ```sh
-# 1. Copy the tuning configuration
-sudo install -Dm644 ./host/server/99-xray-tuning.conf /etc/sysctl.d/99-xray-tuning.conf
-
-# 2. Apply parameters immediately
-sudo sysctl --system
-
-# 3. Verify BBR is active
-sysctl net.ipv4.tcp_congestion_control
-# Expected output: net.ipv4.tcp_congestion_control = bbr
+xray x25519          # keep PrivateKey here; PublicKey goes to the client
+xray uuid
+openssl rand -hex 8  # one shortId
 ```
 
----
+See [REALITY Scheme](../../schemes/vless-xtls-vision-reality/README.md) for
+choosing `dest`, and for what the client must be given.
 
-## Step 2: Install Service Account and Systemd Unit
+### Option B: VLESS + Vision + TLS with Web Fallback (domain required)
 
-Deploy the unprivileged `xray` service account and the hardened systemd unit:
+The server terminates standard TLS with your own certificate and hands
+non-proxy traffic to a local web server. The certificate and the fallback site
+are extra infrastructure, so they have their own guide:
+[How to Set Up VLESS + Vision + TLS with Web Fallback](setup-tls-fallback.md).
+Deploy that guide's web server and certificate first, then the config.
+
+## Validate and Start
+
+The preflight the unit runs is the check to run by hand first — a config that
+fails it will fail the service, and doing it here keeps the error readable:
 
 ```sh
-# 1. Create the dedicated xray service account
-sudo install -Dm644 ./host/server/xray-server.sysusers.conf /usr/lib/sysusers.d/xray.conf
-sudo systemd-sysusers
-
-# 2. Install the hardened server unit
-sudo install -Dm644 ./host/server/xray-server.service /etc/systemd/system/xray-server.service
+xray run -test -config /etc/xray/config.json     # must print: Configuration OK
 sudo systemctl daemon-reload
-```
-
----
-
-## Step 3: Configure Server Firewall
-
-Deploy the stateful nftables firewall to protect the host while keeping ports 22, 80, and 443 open:
-
-```sh
-sudo install -Dm644 ./host/server/xray-server.nft /etc/nftables.conf
-sudo systemctl enable --now nftables.service
-```
-
----
-
-## Step 4: Choose and Deploy a Transport Scheme
-
-Select a scheme from `schemes/` according to your requirements:
-
-### Option A: VLESS + Vision + REALITY (Zero Domain Setup)
-```sh
-# 1. Copy full template
-S=./schemes/vless-xtls-vision-reality
-cp $S/server.json $S/server.local.json
-
-# 2. Fill in UUID, serverNames, privateKey, and shortId
-$EDITOR $S/server.local.json
-xray run -test -config $S/server.local.json
-sudo install -Dm600 $S/server.local.json /etc/xray/config.json
-```
-See [REALITY Scheme Guide](../../schemes/vless-xtls-vision-reality/README.md) for key generation.
-
-### Option B: VLESS + Vision + TLS (Domain & Web Fallback)
-```sh
-# Follow the dedicated guide:
-# docs/how-to/setup-tls-fallback.md
-```
-
----
-
-## Step 5: Validate and Start
-
-Always test configuration syntax before starting:
-
-```sh
-# Validate configuration
-sudo xray run -test -config /etc/xray/config.json
-# Must output: Configuration OK.
-
-# Enable and start service
 sudo systemctl enable --now xray-server.service
-
-# Check health and status
-sudo systemctl status xray-server.service
-sudo ss -tlpn | grep xray
 ```
+
+## Confirm the Result
+
+```sh
+sudo systemctl status xray-server.service
+sudo ss -tlpn | grep xray                       # must be listening on 443
+sudo journalctl -u xray-server -n 50
+```
+
+Then check it from outside, which is the only test that matters:
+
+- **REALITY**: the server is indistinguishable from the borrowed site, so the
+  check is behavioural — connect as a client and confirm traffic flows, and
+  connect as a stranger (`curl -I --resolve <serverName>:443:<IP>`) and confirm
+  you get that site's genuine response.
+- **TLS + fallback**: `curl -I https://<your-domain>` should answer `HTTP/2 200`
+  with the fallback site's content.
+
+If the service is up, listening, and still no client can connect, the fault is
+almost always on the client side of the scheme — mismatched UUID, `shortId` or
+`serverName`, or a blocked port. Compare the two configs' values directly.

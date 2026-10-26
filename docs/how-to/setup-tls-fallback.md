@@ -58,54 +58,23 @@ sudo setfacl -R -d -m u:xray:rx /etc/letsencrypt/archive/
 
 ---
 
-## Step 3: Deploy Xray Server Configuration
+## Step 3: Deploy the Xray Configs
 
-Deploy the server template from the scheme directory:
+With the web server and the certificate in place, the Xray side is the scheme's
+own deployment: copy `server.json` on this host — and `client.json` on the
+client — to a sibling `*.local.json`, fill in `<UUID:...>` and
+`<SERVER_DOMAIN:...>`, validate, and install. The commands and the placeholder
+list are in
+[Deploying This Scheme](../../schemes/vless-xtls-vision-tls/README.md#5-deploying-this-scheme).
 
-```sh
-# 1. Copy the scheme template to a git-ignored local copy
-S=./schemes/vless-xtls-vision-tls
-cp $S/server.json $S/server.local.json
-
-# 2. Edit configuration
-$EDITOR $S/server.local.json
-# Replace:
-#   <UUID:...> with your UUID (generate with `xray uuid`)
-#   <SERVER_DOMAIN:...> with your actual domain (e.g., node.example.com)
-
-# 3. Test and install
-xray run -test -config $S/server.local.json
-sudo install -Dm600 $S/server.local.json /etc/xray/config.json
-sudo systemctl restart xray-server.service
-```
+Two values must agree across the two hosts, and both come from this one scheme
+directory: the UUID, and the domain name (`serverNames` on the server,
+`serverName` on the client). The certificate must be issued for that same
+domain, or the client fails the handshake.
 
 ---
 
-## Step 4: Configure Client Side
-
-On the client machine (workstation or router):
-
-```sh
-# 1. Copy the scheme template to a git-ignored local copy
-S=./schemes/vless-xtls-vision-tls
-cp $S/client.json $S/client.local.json
-
-# 2. Edit configuration
-$EDITOR $S/client.local.json
-# Replace:
-#   <SERVER_DOMAIN:...> with node.example.com
-#   <UUID:...> with matching server UUID
-#   <SERVER_IP:...> with VPS public IP (for routing bypass)
-
-# 3. Validate and install
-xray run -test -config $S/client.local.json
-sudo install -Dm600 $S/client.local.json /etc/xray/config.json
-sudo systemctl restart xray-tproxy.service
-```
-
----
-
-## Step 5: Verification
+## Step 4: Verification
 
 1. **Verify Web Fallback**: Open `https://node.example.com` in a browser or run:
    ```sh

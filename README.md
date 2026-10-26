@@ -80,61 +80,70 @@ committed: copy a scheme config to a sibling `*.local.json` and fill it in —
 
 ## Quick Start
 
-### 1. Client Setup (Workstation / Gateway)
+Two hosts, one scheme. **Install the OS layer from this repository, then deploy
+the same scheme's config on both ends.** Pick the scheme first: `reality` needs
+nothing but an IP, `tls` needs a domain and a certificate.
+
+Every command is one `install`; nothing is generated or templated. Explanations
+per step, prerequisites and the optional parts are in
+[How to Install and Start the Transparent Proxy](docs/how-to/install-and-start.md).
+
+### On the client (workstation / gateway)
 
 ```sh
-# 1. Install the OS layer (scheme-independent, from host/client/)
-sudo install -Dm644 ./host/client/xray-tproxy.service /etc/systemd/system/
-sudo install -Dm644 ./host/client/xray-tproxy.nft /etc/nftables/xray-tproxy.nft
-sudo install -Dm644 ./host/client/xray-tproxy.sysusers.conf /usr/lib/sysusers.d/xray.conf
+SCHEME=./schemes/vless-xtls-vision-reality   # or: vless-xtls-vision-tls
+
+# 1. OS layer (scheme-independent)
+sudo install -Dm644 ./host/client/xray-tproxy.service        /etc/systemd/system/
+sudo install -Dm644 ./host/client/xray-tproxy.nft            /etc/nftables/xray-tproxy.nft
+sudo install -Dm644 ./host/client/xray-tproxy.sysusers.conf  /usr/lib/sysusers.d/xray.conf
 sudo systemd-sysusers
 
-# 2. Deploy a scheme: copy the template, fill in the local values
-SCHEME=./schemes/vless-xtls-vision-reality     # or ./schemes/vless-xtls-vision-tls
+# 2. The scheme's client config: copy the template beside it, fill it in, test it
 cp $SCHEME/client.json $SCHEME/client.local.json
-$EDITOR $SCHEME/client.local.json              # fill in every <PLACEHOLDER:...>
+$EDITOR $SCHEME/client.local.json            # fill in every <PLACEHOLDER:...>
 xray run -test -config $SCHEME/client.local.json
 sudo install -Dm600 $SCHEME/client.local.json /etc/xray/config.json
 
-# 3. Configure networkd policy routing drop-in
+# 3. Policy-routing drop-in, one per uplink profile (<uplink> = e.g. 20-wireless)
 sudo install -Dm644 ./host/client/xray-policy.conf \
   /etc/systemd/network/<uplink>.network.d/xray-policy.conf
 
-# 4. Reconfigure network and start
-sudo networkctl reconfigure <uplink>
-sudo systemctl daemon-reload
+# 4. Start
+sudo networkctl reconfigure <uplink> && sudo systemctl daemon-reload
 sudo systemctl enable --now xray-tproxy.service
 ```
 
-### 2. Server Setup (VPS Egress Node)
+`$SCHEME/client.local.json` is git-ignored: that is where the credentials live.
+Step 3 is easy to miss and fails silently — a profile without the drop-in has
+no policy rule, so traffic goes direct while the service looks healthy. The
+unit repairs the rule if it is missing, and logs that it had to.
+
+### On the server (VPS egress node)
 
 ```sh
-# 1. Apply BBR kernel tuning and buffer optimization
-sudo install -Dm644 ./host/server/99-xray-tuning.conf /etc/sysctl.d/
-sudo sysctl --system
+SCHEME=./schemes/vless-xtls-vision-reality   # the same scheme as the client
 
-# 2. Install unprivileged service account & hardened systemd unit
-sudo install -Dm644 ./host/server/xray-server.sysusers.conf /usr/lib/sysusers.d/xray.conf
+# 1. OS layer
+sudo install -Dm644 ./host/server/99-xray-tuning.conf        /etc/sysctl.d/ && sudo sysctl --system
+sudo install -Dm644 ./host/server/xray-server.sysusers.conf  /usr/lib/sysusers.d/xray.conf
 sudo systemd-sysusers
-sudo install -Dm644 ./host/server/xray-server.service /etc/systemd/system/
-
-# 3. Apply stateful firewall
-sudo install -Dm644 ./host/server/xray-server.nft /etc/nftables.conf
+sudo install -Dm644 ./host/server/xray-server.service        /etc/systemd/system/
+sudo install -Dm644 ./host/server/xray-server.nft            /etc/nftables.conf
 sudo systemctl enable --now nftables.service
 
-# 4. Deploy the server half of the same scheme
-SCHEME=./schemes/vless-xtls-vision-reality     # must match the client's scheme
+# 2. The same scheme's server config
 cp $SCHEME/server.json $SCHEME/server.local.json
-$EDITOR $SCHEME/server.local.json              # fill in UUID, privateKey, serverNames
+$EDITOR $SCHEME/server.local.json            # fill in UUID, privateKey, serverNames
 xray run -test -config $SCHEME/server.local.json
 sudo install -Dm600 $SCHEME/server.local.json /etc/xray/config.json
 
-# 5. Start
-sudo systemctl daemon-reload
-sudo systemctl enable --now xray-server.service
+# 3. Start
+sudo systemctl daemon-reload && sudo systemctl enable --now xray-server.service
 ```
 
-For setting up the `vless-xtls-vision-tls` scheme with Let's Encrypt and Nginx fallback, see [How to Set Up VLESS + Vision + TLS with Web Fallback](docs/how-to/setup-tls-fallback.md).
+The `tls` scheme additionally needs a certificate and a local web server for the
+fallback site: [How to Set Up VLESS + Vision + TLS with Web Fallback](docs/how-to/setup-tls-fallback.md).
 
 ---
 
