@@ -1,7 +1,7 @@
 # Traffic Selection Reference
 
 Lookup for what the nftables rules in
-[xray-tproxy.nft](../../xray-tproxy.nft) intercept and what they bypass.
+[client/xray-tproxy.nft](../../client/xray-tproxy.nft) intercept and what they bypass.
 The tables are `ip xray_v4` and `ip6 xray_v6`; each has a `prerouting`
 chain (traffic passing through) and an `output` chain (locally generated
 traffic).

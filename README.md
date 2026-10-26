@@ -1,67 +1,146 @@
-# Xray TProxy Guidebook
+# Xray Architecture & Modern Deployment Guidebook
+
+A production-grade, end-to-end proxy architecture for modern Linux workstations, routers, and server hosts. Designed for zero-compromise anti-censorship performance, complete leak prevention, and modular transport scheme management.
+
+---
 
 ## What It Is
 
-This project provides a transparent proxy client setup for a single-host
-Linux machine using Xray, nftables, and policy routing. Once installed,
-all application traffic is routed through Xray according to your rules —
-no per-application proxy configuration needed.
+This repository provides an integrated, dual-tier solution:
+1. **Client Tier**: A robust transparent proxy (TProxy) for Linux workstations and routers using Xray, nftables, and policy routing. Application traffic routes transparently with zero per-application configuration.
+2. **Server Tier**: A hardened, production-grade egress node on a Linux VPS featuring unprivileged systemd sandboxing, stateful nftables firewalls, modern BBR kernel tuning, and automated Web Fallback.
+3. **Pluggable Schemes Matrix**: Fully decoupled, ready-to-deploy transport schemes:
+   - **VLESS + TCP + XTLS-Vision + REALITY**: Zero domain required, borrows high-reputation foreign TLS identities, deflecting active scanners directly to the destination target.
+   - **VLESS + TCP + XTLS-Vision + TLS (Web Fallback)**: Uses self-owned domains and authentic CA certificates, deflecting active probes to an authentic local disguise website (Nginx/Caddy) via the PROXY protocol.
 
-It is tuned for a workstation or laptop running `systemd-networkd` and a
-local resolver such as `systemd-resolved`:
+### Core Architectural Guarantees
+- **Real-IP Smart DNS Split**: DNS resolves via DoH; applications receive authentic, unpolluted IP addresses without FakeIP subnet anomalies or DNS pollution.
+- **XTLS-Vision Traffic Steer**: Injects randomized padding during handshakes to destroy TLS-in-TLS machine learning signatures, followed by Linux `splice()` zero-copy kernel transfers for native wire speed.
+- **Fail-Closed Reliability**: Crashes preserve kernel tables and routes so failed units fail closed instead of leaking unproxied traffic.
+- **Captive Portal Compatibility**: Portal probes dynamically resolve via local DHCP DNS and route direct for public Wi-Fi popups.
+- **Active Probing Deflection**: Scanners attempting active probing are either proxied to genuine destination targets (REALITY) or served authentic website content from local Nginx/Caddy (TLS Fallback).
 
-- **Real-IP Smart DNS Split**: All DNS is handled via Xray DoH; applications receive authentic, unpolluted IP addresses without FakeIP subnet anomalies
-- **Full TProxy Protection**: Both HTTP (port 80) and HTTPS (port 443) for overseas destinations travel through the proxy tunnel, protecting against ISP hijacking and GFW blocks
-- **Captive Portal Compatible**: Portal probes dynamically resolve via local DHCP DNS and route direct for automatic Wi-Fi login popups
-- **Root Process Proxying**: `sudo apt update`, `docker pull`, and admin processes are transparently proxied according to Xray routing rules
-- **Resilient Policy Routing**: `systemd-networkd` owns the fwmark policy rule, so it survives sleep/wake and interface switching; the unit repairs it and logs when it is gone
-- **Fail-Closed Restarts**: a crash keeps the tables and the policy route, so the restart window drops traffic instead of leaking it
-- **Observable**: per-outbound byte counters on a loopback gRPC API
-- **Validated on Start**: the unit refuses a config that fails `xray run -test` and asserts the datapath after start
+---
 
+## Directory Overview
+
+```text
+├── schemes/                        # Pluggable transport schemes — one self-contained dir each
+│   ├── vless-xtls-vision-reality/  #   client.json + server.json + README.md
+│   │                               #   VLESS + Vision + REALITY (zero domain)
+│   └── vless-xtls-vision-tls/      #   VLESS + Vision + TLS (domain & web fallback)
+│                                   #   (+ cert-guide.md)
+│
+├── client/                         # OS layer, scheme-independent: generic Linux TProxy
+│   ├── xray-tproxy.service
+│   ├── xray-tproxy.sysusers.conf
+│   ├── xray-tproxy.nft
+│   └── xray-policy.conf
+│
+├── server/                         # OS layer, scheme-independent: VPS egress node
+│   ├── xray-server.service
+│   ├── xray-server.sysusers.conf
+│   ├── xray-server.nft
+│   ├── 99-xray-tuning.conf
+│   └── fallback/{nginx,caddy}/     # Disguise website, used by the TLS scheme only
+│
+└── docs/                           # Comprehensive Diátaxis Documentation
+    ├── how-to/                     # Task-oriented guides (Client & Server)
+    ├── reference/                  # Technical reference (Configs, Traffic)
+    └── explanation/                # Architectural & cryptographic deep dives
+```
+
+Two layers, and they never overlap:
+
+- **A scheme** is picked, not composed. Its directory carries the *whole* Xray
+  configuration for both ends (`client.json`, `server.json`) plus its own
+  documentation; adding a transport means adding one directory. Anything that
+  changes when you switch schemes lives there.
+- **`client/` and `server/`** hold the OS artifacts — nftables rules, unit files,
+  sysusers entries, kernel tuning, the fallback site. These are identical no
+  matter which scheme you run, so they exist once.
+
+Host-specific values (server address, UUID, keys, uplink name) are never
+committed: copy a scheme config to a sibling `*.local.json` and fill it in —
+`.gitignore` covers that suffix.
+
+---
 
 ## Quick Start
 
-Run from the repository root:
+### 1. Client Setup (Workstation / Gateway)
 
 ```sh
-# 1. the solution: unit, ruleset, service account, networkd template
-#    (upstream xray and the geo data come in as dependencies)
-sudo install -Dm644 ./xray-tproxy.service /var/lib/wright/plans/xray-tproxy/
-sudo install -Dm644 ./xray-tproxy.nft /var/lib/wright/plans/xray-tproxy/
-sudo install -Dm644 ./xray-tproxy.sysusers.conf /var/lib/wright/plans/xray-tproxy/
-sudo install -Dm644 ./xray-policy.conf /var/lib/wright/plans/xray-tproxy/
-sudo wright install xray-tproxy
+# 1. Install the OS layer (scheme-independent, from client/)
+sudo install -Dm644 ./client/xray-tproxy.service /etc/systemd/system/
+sudo install -Dm644 ./client/xray-tproxy.nft /etc/nftables/xray-tproxy.nft
+sudo install -Dm644 ./client/xray-tproxy.sysusers.conf /usr/lib/sysusers.d/xray.conf
+sudo systemd-sysusers
 
-# 2. operator-owned configuration: only what differs per host
-cp ./xray-config/client/config-example.json ./xray-config/client/config-jp.json
-$EDITOR ./xray-config/client/config-jp.json      # fill in every <PLACEHOLDER:...>
-sudo install -Dm600 ./xray-config/client/config-jp.json /etc/xray/config.json
-sudo install -Dm644 /usr/share/xray-tproxy/xray-policy.conf \
+# 2. Deploy a scheme: copy the template, fill in the local values
+SCHEME=./schemes/vless-xtls-vision-reality     # or ./schemes/vless-xtls-vision-tls
+cp $SCHEME/client.json $SCHEME/client.local.json
+$EDITOR $SCHEME/client.local.json              # fill in every <PLACEHOLDER:...>
+xray run -test -config $SCHEME/client.local.json
+sudo install -Dm600 $SCHEME/client.local.json /etc/xray/config.json
+
+# 3. Configure networkd policy routing drop-in
+sudo install -Dm644 ./client/xray-policy.conf \
   /etc/systemd/network/<uplink>.network.d/xray-policy.conf
 
-# 3. validate, then start
-sudo xray run -test -config /etc/xray/config.json    # must print: Configuration OK
+# 4. Reconfigure network and start
 sudo networkctl reconfigure <uplink>
 sudo systemctl daemon-reload
 sudo systemctl enable --now xray-tproxy.service
 ```
 
-Replace `<uplink>` with the `.network` file that manages your connection
-(such as `20-wireless.network`); every uplink profile you use needs the
-policy drop-in. Step 2 holds the only host-specific values (credentials and
-the uplink name) — see
-[How to Install and Start the Transparent Proxy](docs/how-to/install-and-start.md)
-for prerequisites and per-step explanations.
+### 2. Server Setup (VPS Egress Node)
 
+```sh
+# 1. Apply BBR kernel tuning and buffer optimization
+sudo install -Dm644 ./server/99-xray-tuning.conf /etc/sysctl.d/
+sudo sysctl --system
 
+# 2. Install unprivileged service account & hardened systemd unit
+sudo install -Dm644 ./server/xray-server.sysusers.conf /usr/lib/sysusers.d/xray.conf
+sudo systemd-sysusers
+sudo install -Dm644 ./server/xray-server.service /etc/systemd/system/
+
+# 3. Apply stateful firewall
+sudo install -Dm644 ./server/xray-server.nft /etc/nftables.conf
+sudo systemctl enable --now nftables.service
+
+# 4. Deploy the server half of the same scheme
+SCHEME=./schemes/vless-xtls-vision-reality     # must match the client's scheme
+cp $SCHEME/server.json $SCHEME/server.local.json
+$EDITOR $SCHEME/server.local.json              # fill in UUID, privateKey, serverNames
+xray run -test -config $SCHEME/server.local.json
+sudo install -Dm600 $SCHEME/server.local.json /etc/xray/config.json
+
+# 5. Start
+sudo systemctl daemon-reload
+sudo systemctl enable --now xray-server.service
+```
+
+For setting up the `vless-xtls-vision-tls` scheme with Let's Encrypt and Nginx fallback, see [How to Set Up VLESS + Vision + TLS with Web Fallback](docs/how-to/setup-tls-fallback.md).
+
+---
 
 ## Documentation
 
-See the [Documentation Index](docs/index.md). Frequently used pages:
+See the [Documentation Index](docs/index.md):
 
+### Guides
+- [How to Install and Start the Transparent Proxy](docs/how-to/install-and-start.md)
+- [How to Deploy an Xray Proxy Server on a VPS](docs/how-to/deploy-server.md)
+- [How to Set Up VLESS + Vision + TLS with Web Fallback](docs/how-to/setup-tls-fallback.md)
 - [How to Verify the Setup](docs/how-to/verify-the-setup.md)
-- [How to Use Captive Portal Networks](docs/how-to/use-captive-portal-networks.md)
-- [Client Configuration Reference](docs/reference/client-configuration.md)
+- [How to Troubleshoot Common Problems](docs/how-to/troubleshoot-common-problems.md)
+
+### Reference & Mechanism Deep Dives
+- [Transport Schemes Matrix](schemes/README.md)
+- [XTLS-Vision Mechanism](docs/explanation/mechanisms/xtls-vision.md)
+- [REALITY Protocol Mechanism](docs/explanation/mechanisms/reality.md)
+- [Standard TLS with Fallback Mechanism](docs/explanation/mechanisms/tls-fallback.md)
 - [Architecture](docs/explanation/architecture.md)
 - [Data Packet Lifecycle](docs/explanation/packet-lifecycle.md)

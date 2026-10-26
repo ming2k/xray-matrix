@@ -82,8 +82,8 @@ and the rest of the sandbox are enabled and safe for the Go runtime.
 ## Configuration is a secret
 
 `/etc/xray/config.json` holds the VLESS user ID and the REALITY key: mode
-`600`, owner `root`, never in the repository (`xray-config/client/` excludes
-`config-*.json` except the example). Credential templating was considered
+`600`, owner `root`, never in the repository (`schemes/*/` excludes
+`*.local.json`). Credential templating was considered
 and rejected: it needs a renderer at start-up, and a generator script in
 this project is the thing the guidebook exists to avoid.
 

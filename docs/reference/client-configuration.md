@@ -1,7 +1,8 @@
 # Client Configuration Reference
 
-Lookup for the Xray client config. The template lives at
-[xray-config/client/config-example.json](../../xray-config/client/config-example.json);
+Lookup for the Xray client config. One complete template per scheme lives at
+`schemes/<scheme>/client.json` (start from
+[vless-xtls-vision-reality/client.json](../../schemes/vless-xtls-vision-reality/client.json));
 the deployed copy is `/etc/xray/config.json`. The unit starts Xray with
 `-config /etc/xray/config.json`, so exactly one file is loaded: extra
 `*.json` files placed in `/etc/xray/` are ignored, not merged.

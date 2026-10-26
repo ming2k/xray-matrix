@@ -1,10 +1,54 @@
 # Architecture
 
-The setup moves application traffic through Xray without any
-per-application proxy configuration. Four components cooperate, and each
-has exactly one owner.
+The system provides an uncompromising, end-to-end proxy architecture connecting a transparently proxied Linux client to a hardened server through pluggable, censorship-resilient transport schemes.
 
-## Traffic Flow
+---
+
+## 1. End-to-End System Topology
+
+```text
+[Client Applications]
+        |
+        v
++-----------------------------------------------------------------------------+
+| CLIENT TIER (Workstation / Gateway Datapath)                                |
+| 1. nftables: Marks external TCP/UDP packets with fwmark=1 (bypasses mark 2) |
+| 2. Policy Routing: fwmark=1 -> Table 110 -> local delivery to loopback     |
+| 3. Xray TProxy (:12345): Recovers original destination IP (IP_TRANSPARENT)   |
+| 4. Smart DNS: localhost for portals, 223.5.5.5 for CN, DoH for foreign      |
+| 5. Routing: Classifies direct / blocked / proxy                             |
++-------------------------------------+---------------------------------------+
+                                      |
+                     Pluggable Transport Scheme Tunnel
+                     (e.g., VLESS + TCP + XTLS-Vision + REALITY or TLS)
+                                      |
+                                      v
++-----------------------------------------------------------------------------+
+| SERVER TIER (VPS Egress Datapath)                                           |
+| 1. nftables: Stateful baseline firewall (drops invalid, admits 22/80/443)   |
+| 2. Kernel Tuning: BBR congestion control, TCP Fast Open, 64MB buffers       |
+| 3. Xray Server (:443): Terminates outer TLS/REALITY, authenticates VLESS    |
+| 4. Active Probing Defense: Direct deflection (REALITY) or Fallback (TLS)    |
+| 5. Outbound Freedom: High-speed egress to the global Internet               |
++-----------------------------------------------------------------------------+
+```
+
+---
+
+## 2. Pluggable Transport Schemes Architecture
+
+The transport tunnel between client and server is decoupled from the underlying operating system datapaths:
+- **Client Datapath Invariant**: The client's kernel Netfilter rules, routing policy table 110, Smart DNS split, and local application interceptions remain identical regardless of which transport scheme is selected.
+- **Server Datapath Invariant**: The server's kernel BBR tuning, firewall rules, and systemd service sandboxing remain identical across schemes.
+- **Scheme Pluggability**: A scheme directory in `schemes/` pairs a complete client config (`client.json`) with a complete server config (`server.json`); switching schemes means deploying the other directory's configs and touching nothing else:
+  - **Scheme 1 (`vless-xtls-vision-reality`)**: Borrows third-party TLS identities; zero domain requirement; deflecting active scanners directly to the destination target.
+  - **Scheme 2 (`vless-xtls-vision-tls`)**: Uses self-owned domain and authentic CA certificates; deflecting active probes to a local disguise website (Nginx/Caddy) via the PROXY protocol.
+
+---
+
+## 3. Client Datapath Mechanics
+
+The client moves application traffic through Xray without any per-application proxy configuration:
 
 ```text
 [Application] -> [OUTPUT chain] -> [Policy Routing] -> [Loopback Interface] -> [Xray]
@@ -16,81 +60,37 @@ has exactly one owner.
 
 1. nftables marks intercepted application packets with `fwmark=1`.
 2. Policy routing sends mark-1 packets into routing table `110`.
-3. Table `110` contains a `local` route to loopback, so the kernel
-   delivers the packet to Xray while preserving the original destination.
-4. Xray inspects the original destination and forwards the traffic
-   according to the configured routing rules (`direct` / `proxy` /
-   `blocked`).
+3. Table `110` contains a `local` route to loopback, delivering packets to Xray while preserving the original destination IP.
+4. Xray inspects original destinations, performs domain sniffing, queries Smart DNS, and forwards traffic according to routing rules.
 
-The exact match/bypass list is in
-[Traffic Selection Reference](../reference/traffic-selection.md); the
-defaults that are choices rather than facts are in
-[Policy Decisions](policy-decisions.md).
+See [Traffic Selection Reference](../reference/traffic-selection.md) and [Data Packet Lifecycle](packet-lifecycle.md).
 
-## Component Ownership
+---
+
+## 4. Component Ownership Boundaries
 
 | Component | Owner |
-|-----------|-------|
-| nftables tables `xray_v4` / `xray_v6` | `xray-tproxy.service` (`ExecStartPre` loads, `ExecStopPost` deletes on explicit stop) |
-| `local default` routes in table `110` | `xray-tproxy.service` (`ExecStartPre`) |
-| `fwmark 1 -> table 110` policy rule | `systemd-networkd` drop-in ([xray-policy.conf](../../xray-policy.conf)), installed per uplink profile; the unit only *repairs* it when missing and never removes it |
-| Xray process | `xray-tproxy.service`, running as the unprivileged `xray` user |
+| :--- | :--- |
+| **Client nftables tables (`xray_v4` / `xray_v6`)** | `xray-tproxy.service` (`ExecStartPre` loads, `ExecStopPost` removes on explicit stop) |
+| **Client Table 110 routes** | `xray-tproxy.service` (`ExecStartPre`) |
+| **Client fwmark policy rule** | `systemd-networkd` drop-in (`xray-policy.conf`), installed per uplink; unit repairs if missing |
+| **Client Xray daemon** | `xray-tproxy.service`, running as unprivileged user `xray` |
+| **Server Kernel Tuning** | `sysctl.d/99-xray-tuning.conf` (BBR, TFO, socket buffers) |
+| **Server Firewall** | `server/xray-server.nft` |
+| **Server Xray daemon** | `xray-server.service`, running as unprivileged user `xray` with `CAP_NET_BIND_SERVICE` |
+| **Server Web Fallback** | Local Nginx or Caddy listening on `127.0.0.1:8080` |
 
-Both halves fail silently on their own, which is why the unit asserts them:
+---
 
-- An uplink profile without the drop-in has no policy rule, so marked
-  packets route normally: proxying is bypassed while the unit reports
-  `active`. `ExecStartPre` repairs the rule and logs it; `ExecStartPost`
-  fails if it is still missing.
-- `flush ruleset` in `/etc/nftables.conf` deletes both tables, so the unit
-  recreates them on every start instead of assuming they persist.
+## 5. Reliability & Security Guarantees
 
-Stopping the service therefore restores plain networking completely: the
-unit's `ExecStopPost` removes the nftables tables and flushes table `110`.
-This property is what the captive-portal workaround in
-[How to Use Captive Portal Networks](../how-to/use-captive-portal-networks.md)
-relies on.
+### Suspend and Resume Resiliency
+On `systemd-networkd` client hosts, a suspend/resume cycle may reconfigure the uplink and drop foreign `ip rule` entries while leaving route tables intact. The client unit uses an uplink drop-in owned by networkd, so networkd automatically reapplies the rule upon reconfiguring the link.
 
-## Suspend And Resume
+### Fail-Closed Restarts
+On the client, `ExecStopPost` branches on `$SERVICE_RESULT`:
+- `success` (operator stop/restart): Tables and routes are removed, restoring direct networking.
+- Anything else (crash, signal, timeout): The datapath stays installed. The `Restart=always` window drops traffic rather than leaking unencrypted packets.
 
-On `systemd-networkd` hosts, a suspend/resume cycle may reconfigure the
-uplink and remove foreign `ip rule` entries while leaving nftables tables
-and custom route tables intact. The typical symptom after resume:
-
-- `sudo nft list tables` still shows `xray_v4` and `xray_v6`
-- `ip route show table 110` still shows `local default dev lo`
-- `ip rule show` no longer shows `fwmark 0x1 lookup 110`
-
-Traffic then bypasses the proxy silently. Because the policy rule lives in
-a networkd drop-in instead of in the service unit, networkd reapplies the
-rule itself whenever it reconfigures the uplink, and
-`networkctl reconfigure <uplink>` restores it manually. If the uplink has
-no drop-in at all, the unit's repair path and its post-start assertion are
-what surface it.
-
-## Privilege Boundaries
-
-Xray runs as `xray` with only
-`CAP_NET_ADMIN CAP_NET_BIND_SERVICE CAP_NET_RAW`, and with
-`ProtectHome`, `ProtectSystem=strict`, `ProtectKernelModules` and
-`PrivateDevices` set. Commands that touch kernel state carry the `+` prefix,
-so they are the only unsandboxed part of the unit. Loop prevention relies
-on mark matching:
-Xray's own outbound connections carry `sockopt.mark: 2`, which the
-nftables rules (`meta mark 2 return`) bypass explicitly. All process traffic
-(including root administrative processes) is transparently intercepted and
-routed according to Xray's rules.
-
-
-## Fail-Closed Restart
-
-`ExecStopPost` branches on `$SERVICE_RESULT`:
-
-- `success` (operator stop/restart): tables and the `local default` route
-  are removed, and the machine returns to plain networking;
-- anything else (crash, signal, timeout): the datapath stays installed, so
-  the `Restart=always` window drops traffic instead of leaking it unproxied.
-
-A permanently failing unit therefore leaves the machine without
-connectivity. That is the intended trade-off: silent bypass is worse than
-no network.
+### Privilege Sandboxing
+Both client and server run as the unprivileged `xray` user with strict systemd security boundaries (`ProtectHome`, `ProtectSystem=strict`, `NoNewPrivileges=true`, `PrivateDevices`, `MemoryDenyWriteExecute`).

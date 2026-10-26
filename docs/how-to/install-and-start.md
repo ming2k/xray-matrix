@@ -21,7 +21,7 @@ You also need:
   `xray run -test`.
 
 - a VLESS+Reality server. See
-  [Server Config Template](../../xray-config/server/config-example.json)
+  [Server Config Template](../../schemes/vless-xtls-vision-reality/server.json)
   if you run your own.
 - `systemd-resolved` (or another local resolver) and an uplink managed by
   `systemd-networkd`.
@@ -36,17 +36,17 @@ The split is by whether a value differs per host:
 | Artifact | Layer | Installed by / to |
 |---|---|---|
 | `xray` (the binary) | upstream, unmodified | `wright install xray` |
-| `xray-tproxy.service`, `xray-tproxy.nft`, `xray-tproxy.sysusers.conf`, `xray-policy.conf` (template) | solution | `wright install xray-tproxy` → unit, `/etc/nftables/xray-tproxy.nft`, `/usr/lib/sysusers.d/xray.conf`, `/usr/share/xray-tproxy/xray-policy.conf` |
-| `xray-config/client/config-<profile>.json` | operator | `/etc/xray/config.json`, mode `600` — holds the user ID and the REALITY key |
-| `xray-policy.conf` copied into an uplink profile | operator | `/etc/systemd/network/<uplink>.network.d/` — the profile name is host-specific |
+| `client/xray-tproxy.service`, `client/xray-tproxy.nft`, `client/xray-tproxy.sysusers.conf`, `client/xray-policy.conf` (template) | solution | `wright install xray-tproxy` → unit, `/etc/nftables/xray-tproxy.nft`, `/usr/lib/sysusers.d/xray.conf`, `/usr/share/xray-tproxy/xray-policy.conf` |
+| `schemes/<scheme>/client.json` | operator | `/etc/xray/config.json`, mode `600` — holds the user ID and the scheme key |
+| `client/xray-policy.conf` copied into an uplink profile | operator | `/etc/systemd/network/<uplink>.network.d/` — the profile name is host-specific |
 
 ## Install the Solution
 
 ```sh
-sudo install -Dm644 ./xray-tproxy.service        /var/lib/wright/plans/xray-tproxy/xray-tproxy.service
-sudo install -Dm644 ./xray-tproxy.nft            /var/lib/wright/plans/xray-tproxy/xray-tproxy.nft
-sudo install -Dm644 ./xray-policy.conf           /var/lib/wright/plans/xray-tproxy/xray-policy.conf
-sudo install -Dm644 ./xray-tproxy.sysusers.conf  /var/lib/wright/plans/xray-tproxy/xray-tproxy.sysusers.conf
+sudo install -Dm644 ./client/xray-tproxy.service        /var/lib/wright/plans/xray-tproxy/xray-tproxy.service
+sudo install -Dm644 ./client/xray-tproxy.nft            /var/lib/wright/plans/xray-tproxy/xray-tproxy.nft
+sudo install -Dm644 ./client/xray-policy.conf           /var/lib/wright/plans/xray-tproxy/xray-policy.conf
+sudo install -Dm644 ./client/xray-tproxy.sysusers.conf  /var/lib/wright/plans/xray-tproxy/xray-tproxy.sysusers.conf
 sudo wright install xray-tproxy          # pulls xray and v2ray-rules-dat in
 ```
 
@@ -93,19 +93,23 @@ echo '110 xray' | sudo tee -a /etc/iproute2/rt_tables
 
 ## Create the Xray Client Config
 
-Start from the annotated template, fill in every `<PLACEHOLDER:...>` (see
-the [Client Configuration Reference](../reference/client-configuration.md#placeholders)),
-keep the result as `xray-config/client/config-<profile>.json`, and validate
-before installing:
+Start from the template in the scheme directory you chose, keep a copy beside
+it as `client.local.json`, fill in every `<PLACEHOLDER:...>` (see the
+[Client Configuration Reference](../reference/client-configuration.md#placeholders)),
+and validate before installing:
 
 ```sh
-xray run -test -config ./xray-config/client/config-jp.json   # Configuration OK
-sudo install -Dm600 ./xray-config/client/config-jp.json /etc/xray/config.json
+S=./schemes/vless-xtls-vision-reality
+cp $S/client.json $S/client.local.json
+$EDITOR $S/client.local.json
+xray run -test -config $S/client.local.json                  # Configuration OK
+sudo install -Dm600 $S/client.local.json /etc/xray/config.json
 ```
 
-`xray run -test` is the check the unit runs before starting, so a bad config
-never replaces a working process; `sudo nft -c -f ./xray-tproxy.nft` does the
-same for the ruleset.
+The `.local.json` suffix is git-ignored, so per-host credentials stay out of
+the repository. `xray run -test` is the check the unit runs before starting,
+so a bad config never replaces a working process; `sudo nft -c -f
+./client/xray-tproxy.nft` does the same for the ruleset.
 
 `LogsDirectory=xray` makes the unit create and own `/var/log/xray`.
 
