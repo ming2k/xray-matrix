@@ -191,5 +191,9 @@ The project documentation strictly follows the [Diátaxis](docs/index.md) framew
 
 ## Architectural Decision Records & Contributor Standards
 
-- **[Architectural Decision Registry](docs/adr/index.md)**: Binding records, invariant definitions, and trade-offs (ADR-0001 through ADR-0005).
-- **[Engineering Standards](docs/dev/standards/README.md)**: Workspace topology, system invariants, markdown style, and PR review gates.
+- **[Architectural Decision Registry](docs/adr/index.md)**: Binding records, invariant definitions, and trade-offs (ADR-0001 through ADR-0006).
+- **[Engineering Standards](docs/dev/standards/taxonomy.md)**: Documentation taxonomy and audience firewalls, alongside
+  [architecture](docs/dev/standards/architecture.md), [invariants](docs/dev/standards/invariants.md),
+  [ADR authoring](docs/dev/standards/adr.md), [RFC process](docs/dev/standards/rfc.md),
+  [markdown style](docs/dev/standards/style.md) and [postmortems](docs/dev/standards/postmortems.md);
+  verification gates are in [Testing & Verification](docs/dev/testing.md).

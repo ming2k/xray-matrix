@@ -27,7 +27,7 @@ Do not guess repository rules or rely on stale assumptions. Consult authoritativ
 - RFC Deliberation & Proposals: [`docs/dev/standards/rfc.md`](docs/dev/standards/rfc.md)
 - Documentation Taxonomy & Firewalls: [`docs/dev/standards/taxonomy.md`](docs/dev/standards/taxonomy.md)
 - Markdown & Hyperlink Style: [`docs/dev/standards/style.md`](docs/dev/standards/style.md)
-- Engineering Workflow & PR Gates: [`docs/dev/standards/workflow.md`](docs/dev/standards/workflow.md)
+- Testing & Verification Gates: [`docs/dev/testing.md`](docs/dev/testing.md)
 - Blameless Incident Postmortems: [`docs/dev/standards/postmortems.md`](docs/dev/standards/postmortems.md)
 - Testing Strategy & Verification: [`docs/dev/testing.md`](docs/dev/testing.md)
 - Architectural Decision Registry: [`docs/adr/index.md`](docs/adr/index.md)
